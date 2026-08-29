@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>CampusHub 1.0 — Your campus, one tap away.</title>
+  <meta name="description" content="A unified web platform for college students to manage projects, share academic resources, find collaborators, and stay updated on campus events." />
+  
+  <!-- Modern Typography: Space Grotesk & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- App Stylesheet -->
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- Top Developer / Demo Toolbar -->
+  <header class="dev-toolbar" id="dev-toolbar">
+    <div class="dev-toolbar-info">
+      <span class="brand-title">CampusHub 1.0</span>
+      <span class="role-badge" id="role-display-badge">Not Logged In</span>
+    </div>
+    <div class="dev-toolbar-actions">
+      <button class="toolbar-btn" id="btn-switch-role" onclick="window.app && window.app.toggleUserRole()" title="Toggle Student / Admin role">
+        ⇄ Switch Role
+      </button>
+      <button class="toolbar-btn" id="btn-toggle-frame" onclick="window.app && window.app.toggleViewMode()" title="Toggle Phone Simulator vs Wide Laptop View">
+        📱 Mobile Frame
+      </button>
+      <button class="toolbar-btn" onclick="window.app && window.app.openModal('accounts_manager')" title="Manage 10 Student & 4 Admin Custom Accounts">
+        👥 Accounts (10+4)
+      </button>
+      <button class="toolbar-btn" onclick="if(confirm('Reset all demo data and accounts to clean state?')){localStorage.clear();location.reload();}" title="Reset to clean state">
+        ↺ Reset
+      </button>
+    </div>
+  </header>
+
+  <!-- Adaptive App Container (Phone-First Bezel or Responsive Laptop View) -->
+  <main class="app-frame" id="app-frame">
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Scrollable Screen Area -->
+    <div class="app-screen" id="app-screen">
+      <div id="app-root">
+        <!-- Dynamically rendered by app.js -->
+      </div>
+    </div>
+  </main>
+
+  <!-- ES Modules -->
+  <script type="module" src="js/mockData.js"></script>
+  <script type="module" src="js/store.js"></script>
+  <script type="module" src="js/app.js"></script>
+
+  <!-- Toolbar Role Badge Realtime Sync -->
+  <script>
+    setInterval(() => {
+      if (window.app && window.app.store) {
+        try {
+          const state = window.app.store.getState();
+          const badge = document.getElementById('role-display-badge');
+          if (badge) {
+            if (!state.currentUser) {
+              badge.className = 'role-badge';
+              badge.innerHTML = '🔒 Sign Up / Log In';
+            } else if (state.currentUser.role === 'admin') {
+              badge.className = 'role-badge admin';
+              badge.innerHTML = '👑 Admin (' + state.currentUser.name + ')';
+            } else {
+              badge.className = 'role-badge';
+              badge.innerHTML = '🎓 Student (' + state.currentUser.name + ')';
+            }
+          }
+        } catch(e){}
+      }
+    }, 300);
+  </script>
+</body>
+</html>
