@@ -600,6 +600,7 @@ class CampusHubApp {
   }
 
   handleRoleChange(role) {
+    this.selectedSignUpRole = role;
 
     const group = document.getElementById('enrollment-group');
     const input = document.getElementById('su-enrollment');
