@@ -1,17 +1,19 @@
 -- =============================================
 -- STEP 1: Fix the profile auto-create trigger
--- Your table uses full_name, enrollment_number, avatar_url
+-- Column names match the actual profiles table:
+--   id, name, role, email, enrollment, department, semester, avatar, skills, bio, created_at
 -- =============================================
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, role, enrollment_number, department, avatar_url, bio)
+  INSERT INTO public.profiles (id, name, role, email, enrollment, department, avatar, bio)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', 'User'),
     COALESCE(NEW.raw_user_meta_data->>'role', 'student'),
+    NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'enrollment_number', ''),
     COALESCE(NEW.raw_user_meta_data->>'department', 'Computer Engineering'),
     COALESCE(NEW.raw_user_meta_data->>'avatar_url', ''),
@@ -26,7 +28,23 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
 -- =============================================
--- STEP 2: Create missing requests table
+-- STEP 2: Fix any existing profiles with wrong role
+-- =============================================
+UPDATE public.profiles
+SET role = (
+  SELECT raw_user_meta_data->>'role'
+  FROM auth.users
+  WHERE auth.users.id = profiles.id
+)
+WHERE EXISTS (
+  SELECT 1 FROM auth.users
+  WHERE auth.users.id = profiles.id
+    AND raw_user_meta_data->>'role' IS NOT NULL
+    AND auth.users.raw_user_meta_data->>'role' != profiles.role
+);
+
+-- =============================================
+-- STEP 3: Create missing requests table
 -- =============================================
 CREATE TABLE IF NOT EXISTS public.requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -76,68 +94,7 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 -- =============================================
--- STEP 3: Create missing collaboration_posts table
--- =============================================
-CREATE TABLE IF NOT EXISTS public.collaboration_posts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  title TEXT NOT NULL,
-  role_needed TEXT NOT NULL,
-  author_id UUID,
-  author_name TEXT NOT NULL,
-  author_dept TEXT DEFAULT '',
-  author_avatar TEXT DEFAULT '',
-  description TEXT DEFAULT '',
-  tags TEXT[] DEFAULT '{}',
-  requests_count INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE public.collaboration_posts ENABLE ROW LEVEL SECURITY;
-
-DO $$ BEGIN
-  CREATE POLICY "Posts are viewable by everyone" ON public.collaboration_posts FOR SELECT USING (true);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$ BEGIN
-  CREATE POLICY "Authenticated users can insert posts" ON public.collaboration_posts FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
--- =============================================
--- STEP 4: Create missing chat_messages table
--- =============================================
-CREATE TABLE IF NOT EXISTS public.chat_messages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  sender_id UUID,
-  sender_name TEXT NOT NULL,
-  receiver_id UUID,
-  text TEXT NOT NULL,
-  is_system BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
-
-DO $$ BEGIN
-  CREATE POLICY "Users can view own chat messages" ON public.chat_messages FOR SELECT USING (
-    auth.uid() = sender_id OR auth.uid() = receiver_id
-  );
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$ BEGIN
-  CREATE POLICY "Authenticated users can send messages" ON public.chat_messages FOR INSERT WITH CHECK (auth.uid() = sender_id);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$ BEGIN
-  ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_messages;
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
--- =============================================
--- STEP 5: Seed projects (skip if already has data)
+-- STEP 4: Seed projects (skip if already has data)
 -- =============================================
 INSERT INTO public.projects (name, category, image, components, description, author, author_dept, uploaded_by, tags, created_at)
 SELECT * FROM (VALUES
@@ -150,7 +107,7 @@ SELECT * FROM (VALUES
 WHERE NOT EXISTS (SELECT 1 FROM public.projects LIMIT 1);
 
 -- =============================================
--- STEP 6: Seed resources (skip if already has data)
+-- STEP 5: Seed resources (skip if already has data)
 -- =============================================
 INSERT INTO public.resources (category, subject_name, subject_code, semester, year, file_name, file_size, downloads, uploaded_by, summary, created_at)
 SELECT * FROM (VALUES
@@ -168,7 +125,7 @@ SELECT * FROM (VALUES
 WHERE NOT EXISTS (SELECT 1 FROM public.resources LIMIT 1);
 
 -- =============================================
--- STEP 7: Seed updates (skip if already has data)
+-- STEP 6: Seed updates (skip if already has data)
 -- =============================================
 INSERT INTO public.updates (title, message, category, image, link, author, is_new, created_at)
 SELECT * FROM (VALUES

@@ -108,13 +108,13 @@ class CampusHubStore {
       if (profiles) {
         this.state.registeredUsers = profiles.map(p => ({
           id: p.id,
-          name: p.full_name || p.name || 'User',
+          name: p.name || 'User',
           role: p.role || 'student',
           email: p.email || '',
-          enrollment: p.enrollment_number || p.enrollment || '',
+          enrollment: p.enrollment || '',
           department: p.department || 'Computer Engineering',
           semester: p.semester || 'Semester 6',
-          avatar: p.avatar_url || p.avatar || '',
+          avatar: p.avatar || '',
           skills: p.skills || [],
           bio: p.bio || ''
         }));
@@ -139,12 +139,12 @@ class CampusHubStore {
         const meta = authUser.user.user_metadata || {};
         const { error: insertError } = await sb.from('profiles').insert({
           id: userId,
-          full_name: meta.full_name || meta.name || 'User',
+          name: meta.full_name || meta.name || 'User',
           role: meta.role || 'student',
           email: authUser.user.email || '',
-          enrollment_number: meta.enrollment_number || meta.enrollment || '',
+          enrollment: meta.enrollment_number || meta.enrollment || '',
           department: meta.department || 'Computer Engineering',
-          avatar_url: meta.avatar_url || '',
+          avatar: meta.avatar_url || meta.avatar || '',
           bio: meta.bio || ''
         });
         if (!insertError) {
@@ -161,13 +161,13 @@ class CampusHubStore {
     // Map from DB columns to app format
     this.state.currentUser = {
       id: data.id,
-      name: data.full_name || data.name || 'User',
+      name: data.name || 'User',
       role: data.role || 'student',
       email: data.email || '',
-      enrollment: data.enrollment_number || data.enrollment || '',
+      enrollment: data.enrollment || '',
       department: data.department || 'Computer Engineering',
       semester: data.semester || 'Semester 6',
-      avatar: data.avatar_url || data.avatar || '',
+      avatar: data.avatar || '',
       skills: data.skills || [],
       bio: data.bio || ''
     };
@@ -565,13 +565,12 @@ class CampusHubStore {
       const { data: profiles } = await sb.from('profiles').select('*').order('created_at', { ascending: true });
       if (profiles) {
         this.state.registeredUsers = profiles.map(p => ({
-          id: p.id,
-          name: p.full_name || p.name || 'User',
+          id: p.id,           name: p.name || 'User',
           role: p.role || 'student',
           email: p.email || '',
-          enrollment: p.enrollment_number || p.enrollment || '',
+          enrollment: p.enrollment || '',
           department: p.department || 'Computer Engineering',
-          avatar: p.avatar_url || p.avatar || '',
+          avatar: p.avatar || '',
           skills: p.skills || [],
           bio: p.bio || ''
         }));
@@ -602,12 +601,12 @@ class CampusHubStore {
           // Sync local state with Supabase profiles
           this.state.registeredUsers = profiles.map(p => ({
             id: p.id,
-            name: p.full_name || p.name || 'User',
+            name: p.name || 'User',
             role: p.role || 'student',
             email: p.email || '',
-            enrollment: p.enrollment_number || p.enrollment || '',
+            enrollment: p.enrollment || '',
             department: p.department || 'Computer Engineering',
-            avatar: p.avatar_url || p.avatar || '',
+            avatar: p.avatar || '',
             skills: p.skills || [],
             bio: p.bio || ''
           }));
@@ -810,10 +809,10 @@ class CampusHubStore {
     const sb = getSupabase();
     if (sb && this.state.currentUser.id) {
       const { error } = await sb.from('profiles').update({
-        full_name: profileData.name,
-        enrollment_number: profileData.enrollment,
+        name: profileData.name,
+        enrollment: profileData.enrollment,
         department: profileData.department,
-        avatar_url: profileData.avatar,
+        avatar: profileData.avatar,
         bio: profileData.bio
       }).eq('id', this.state.currentUser.id);
 
