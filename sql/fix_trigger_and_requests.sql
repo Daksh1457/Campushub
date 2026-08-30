@@ -69,8 +69,11 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
--- Enable realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE public.requests;
+-- Enable realtime (skip if already added)
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.requests;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================
 -- STEP 3: Create missing collaboration_posts table
@@ -128,7 +131,10 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
-ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_messages;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_messages;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================
 -- STEP 5: Seed projects (skip if already has data)

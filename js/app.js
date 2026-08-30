@@ -1277,8 +1277,7 @@ class CampusHubApp {
       </div>
 
 
-      <div class="app-screen">
-        <!-- Centered Profile Header on Mint Band -->
+      <!-- Centered Profile Header on Mint Band -->
         <div class="profile-hero">
           <div class="profile-avatar-wrap">
             <img src="${user.avatar}" alt="${user.name}" class="user-avatar lg" />
@@ -1352,11 +1351,9 @@ class CampusHubApp {
           <div style="text-align:center;margin-top:10px;">
             <button class="btn-outline btn-sm" onclick="window.app.handleLogout()" style="color:#DC2626;border-color:#FCA5A5;">
               Log Out of Account
-            </button>
-          </div>
+            </button>          </div>
         </div>
 
-      </div>
     `;
   }
 

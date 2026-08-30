@@ -172,6 +172,19 @@ class CampusHubStore {
       bio: data.bio || ''
     };
 
+    // Cross-check role with auth user metadata (trigger may have defaulted to 'student')
+    try {
+      const { data: authUser } = await sb.auth.getUser();
+      const metaRole = authUser?.user?.user_metadata?.role;
+      if (metaRole && metaRole !== this.state.currentUser.role) {
+        console.log('[CampusHub] Fixing role mismatch: DB has', this.state.currentUser.role, 'but auth metadata has', metaRole);
+        await sb.from('profiles').update({ role: metaRole }).eq('id', userId);
+        this.state.currentUser.role = metaRole;
+      }
+    } catch (e) {
+      // Non-critical, continue with loaded role
+    }
+
     // Also update in registeredUsers for compatibility
     const existing = this.state.registeredUsers.find(u => u.id === data.id);
     if (existing) {
@@ -646,6 +659,15 @@ class CampusHubStore {
         if (!this.state.currentUser) {
           console.error('[CampusHub] Profile load failed after signup');
           return { success: false, message: 'Account created but profile could not be loaded. Please try logging in.' };
+        }
+        // Ensure the role is correct in the database (trigger may have used wrong default)
+        if (this.state.currentUser.role !== role) {
+          console.log('[CampusHub] Fixing role from', this.state.currentUser.role, 'to', role);
+          await sb.from('profiles').update({ role }).eq('id', data.user.id);
+          this.state.currentUser.role = role;
+          const userInList = this.state.registeredUsers.find(u => u.id === data.user.id);
+          if (userInList) userInList.role = role;
+          this.saveState();
         }
         return { success: true, user: this.state.currentUser };
       }
