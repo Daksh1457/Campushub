@@ -139,12 +139,12 @@ class CampusHubStore {
         const meta = authUser.user.user_metadata || {};
         const { error: insertError } = await sb.from('profiles').insert({
           id: userId,
-          name: meta.full_name || meta.name || 'User',
+          full_name: meta.full_name || meta.name || 'User',
           role: meta.role || 'student',
           email: authUser.user.email || '',
-          enrollment: meta.enrollment_number || meta.enrollment || '',
+          enrollment_number: meta.enrollment_number || meta.enrollment || '',
           department: meta.department || 'Computer Engineering',
-          avatar: meta.avatar_url || '',
+          avatar_url: meta.avatar_url || '',
           bio: meta.bio || ''
         });
         if (!insertError) {
@@ -158,7 +158,7 @@ class CampusHubStore {
       return;
     }
 
-    // Map from your schema (full_name, enrollment_number, avatar_url) to app format
+    // Map from DB columns to app format
     this.state.currentUser = {
       id: data.id,
       name: data.full_name || data.name || 'User',
