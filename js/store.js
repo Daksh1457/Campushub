@@ -520,6 +520,13 @@ class CampusHubStore {
     if (sb) {
       // Sign out current user
       await sb.auth.signOut().catch(() => {});
+
+      // Delete all profiles (except we can't delete auth users from client)
+      try {
+        await sb.from('profiles').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      } catch (e) {
+        console.warn('[CampusHub] Could not delete profiles:', e);
+      }
     }
     // Clear all local state
     this.state = {
@@ -535,6 +542,31 @@ class CampusHubStore {
     localStorage.removeItem(STORAGE_KEY);
     this._cleanupSubscriptions();
     this.notify();
+  }
+
+  // Sync registeredUsers from Supabase profiles (source of truth)
+  async syncSupabaseProfiles() {
+    const sb = getSupabase();
+    if (!sb) return;
+    try {
+      const { data: profiles } = await sb.from('profiles').select('*').order('created_at', { ascending: true });
+      if (profiles) {
+        this.state.registeredUsers = profiles.map(p => ({
+          id: p.id,
+          name: p.full_name || p.name || 'User',
+          role: p.role || 'student',
+          email: p.email || '',
+          enrollment: p.enrollment_number || p.enrollment || '',
+          department: p.department || 'Computer Engineering',
+          avatar: p.avatar_url || p.avatar || '',
+          skills: p.skills || [],
+          bio: p.bio || ''
+        }));
+        this.saveState();
+      }
+    } catch (e) {
+      console.warn('[CampusHub] Could not sync profiles:', e);
+    }
   }
 
   // =============================================
@@ -600,6 +632,10 @@ class CampusHubStore {
 
       if (error) {
         console.error('[CampusHub] Signup error:', error.message);
+        // Provide user-friendly message for common errors
+        if (error.message.includes('already registered') || error.message.includes('already been registered')) {
+          return { success: false, message: 'An account with this email already exists. Please log in instead, or use a different email.' };
+        }
         return { success: false, message: error.message };
       }
 

@@ -46,8 +46,11 @@
       <button class="toolbar-btn" onclick="window.app && window.app.openModal('accounts_manager')" title="Manage 10 Student & 4 Admin Custom Accounts">
         👥 Accounts (10+4)
       </button>
-      <button class="toolbar-btn" onclick="if(confirm('Reset ALL data? This clears localStorage and signs out from Supabase.')){window.app.store.resetAllData().then(()=>{window.app.isLoggedIn=false;window.app.currentView='auth';window.app.authMode='signup';window.app.render();window.app.showToast('All data reset. Start fresh with Sign Up.','success');})}" title="Reset to clean state">
+      <button class="toolbar-btn" onclick="if(confirm('Reset ALL data? This clears localStorage, deletes profiles, and signs out.')){window.app.store.resetAllData().then(()=>{window.app.isLoggedIn=false;window.app.currentView='auth';window.app.authMode='signup';window.app.render();window.app.showToast('All data reset. Start fresh with Sign Up.','success');})}" title="Reset to clean state">
         ↺ Reset
+      </button>
+      <button class="toolbar-btn" onclick="window.app.store.syncSupabaseProfiles().then(()=>{window.app.render();window.app.showToast('Accounts synced from Supabase.','success');})" title="Sync accounts from Supabase database">
+        🔄 Sync
       </button>
     </div>
   </header>

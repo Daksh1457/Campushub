@@ -38,6 +38,7 @@ class CampusHubApp {
 
     this.isDesktopMode = false;
     this.pendingPdfFile = null;
+    this.selectedSignUpRole = 'student';
 
     this.init();
   }
