@@ -17,6 +17,31 @@ class CampusHubStore {
   constructor() {
     this.listeners = [];
     this.state = this.loadState();
+
+    // Cross-tab real-time sync (Fix 5): Live updates for Requests, Chats, and Updates
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', (e) => {
+        if (e.key === STORAGE_KEY && e.newValue) {
+          try {
+            const parsed = JSON.parse(e.newValue);
+            const myUser = this.state.currentUser;
+            this.state = {
+              registeredUsers: parsed.registeredUsers || [],
+              currentUser: myUser ? (parsed.registeredUsers?.find(u => u.id === myUser.id) || myUser) : (parsed.currentUser || null),
+              projects: parsed.projects || INITIAL_STATE.projects,
+              resources: parsed.resources || INITIAL_STATE.resources,
+              collaborationPosts: parsed.collaborationPosts || INITIAL_STATE.collaborationPosts,
+              requests: parsed.requests || [],
+              updateBoard: parsed.updateBoard || INITIAL_STATE.updateBoard,
+              chats: parsed.chats || {}
+            };
+            this.notify();
+          } catch (err) {
+            console.warn('Cross-tab sync error:', err);
+          }
+        }
+      });
+    }
   }
 
   loadState() {
@@ -274,7 +299,8 @@ class CampusHubStore {
       semester: resource.semester || 'Semester 5',
       year: resource.year || '2026',
       fileName: resource.fileName || `${resource.subjectCode}_Academic_Paper.pdf`,
-      fileSize: resource.fileSize || '3.2 MB',
+      fileSize: resource.fileSize || '2.8 MB',
+      fileData: resource.fileData || null,
       downloads: 0,
       uploadedBy: `Admin (${this.state.currentUser ? this.state.currentUser.name : 'Admin'})`,
       summary: resource.summary || `GTU curriculum resource for ${resource.subjectName} (${resource.subjectCode}).`
@@ -283,6 +309,15 @@ class CampusHubStore {
     this.state.resources.unshift(newRes);
     this.saveState();
     return { success: true, resource: newRes };
+  }
+
+  deleteResource(resourceId) {
+    if (!this.isAdmin()) {
+      return { success: false, message: 'Permission denied: Only Admin accounts can delete academic resources.' };
+    }
+    this.state.resources = this.state.resources.filter(r => r.id !== resourceId);
+    this.saveState();
+    return { success: true };
   }
 
   incrementDownloads(resourceId) {

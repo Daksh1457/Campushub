@@ -36,6 +36,7 @@ class CampusHubApp {
     this.captchaCode = this.generateCaptcha();
 
     this.isDesktopMode = false;
+    this.pendingPdfFile = null;
 
     this.init();
   }
@@ -135,6 +136,35 @@ class CampusHubApp {
     this.render();
   }
 
+  isDevMode() {
+    try {
+      const url = new URL(window.location.href);
+      return url.searchParams.get('dev') === '1' || localStorage.getItem('devMode') === 'true';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  toggleDevMode(forceState) {
+    const nextState = forceState !== undefined ? forceState : !this.isDevMode();
+    if (nextState) {
+      localStorage.setItem('devMode', 'true');
+      this.showToast('Developer Mode Enabled (?dev=1)', 'info');
+    } else {
+      localStorage.removeItem('devMode');
+      this.showToast('Developer Mode Disabled', 'info');
+    }
+    this.updateDevToolbarVisibility();
+    this.render();
+  }
+
+  updateDevToolbarVisibility() {
+    const tb = document.getElementById('dev-toolbar');
+    if (tb) {
+      tb.style.display = this.isDevMode() ? 'flex' : 'none';
+    }
+  }
+
   toggleViewMode() {
     this.isDesktopMode = !this.isDesktopMode;
     const frame = document.getElementById('app-frame');
@@ -179,11 +209,100 @@ class CampusHubApp {
     }
   }
 
+  // --- Desktop Sidebar Navigation (Fix 1: Desktop >=1024px & Desktop Preview) ---
+  renderSidebarNav() {
+    const sidebar = document.getElementById('sidebar-nav');
+    if (!sidebar) return;
+
+    if (!this.isLoggedIn || this.currentView === 'auth') {
+      sidebar.style.display = 'none';
+      sidebar.innerHTML = '';
+      return;
+    }
+
+    // Let CSS display rule govern visibility on desktop
+    sidebar.style.display = '';
+
+    const user = this.store.getCurrentUser();
+    const current = this.currentView;
+    const unreadCount = this.store.getUnreadUpdatesCount();
+    const pendingReqs = this.store.getReceivedRequests().length;
+
+    sidebar.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="sidebar-header">
+          <div class="ch-logo-mark">CH</div>
+          <div>
+            <div class="sidebar-brand-name">CampusHub 1.0</div>
+            <div class="sidebar-brand-subtitle">${user ? (user.role === 'admin' ? 'Faculty Admin' : 'Student Portal') : 'Portal'}</div>
+          </div>
+        </div>
+
+        <nav class="sidebar-menu">
+          <button class="sidebar-item ${current === 'dashboard' ? 'active' : ''}" onclick="window.app.navigate('dashboard')">
+            <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            <span>Home / Board</span>
+          </button>
+
+          <button class="sidebar-item ${current === 'projects' ? 'active' : ''}" onclick="window.app.navigate('projects')">
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            <span>Projects</span>
+          </button>
+
+          <button class="sidebar-item ${current === 'resources' || current === 'resource_sub' ? 'active' : ''}" onclick="window.app.navigate('resources')">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+            <span>Study Resources</span>
+          </button>
+
+          <button class="sidebar-item ${current === 'collaboration' ? 'active' : ''}" onclick="window.app.navigate('collaboration')">
+            <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Collaboration</span>
+          </button>
+
+          <button class="sidebar-item ${current === 'updateboard' ? 'active' : ''}" onclick="window.app.navigate('updateboard')">
+            <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span>Update Board</span>
+            ${unreadCount > 0 ? `<span class="sidebar-badge-dot"></span>` : ''}
+          </button>
+
+          <button class="sidebar-item ${current === 'requests' ? 'active' : ''}" onclick="window.app.navigate('requests')">
+            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span>Requests & Chat</span>
+            ${pendingReqs > 0 ? `<span class="sidebar-badge-count">${pendingReqs}</span>` : ''}
+          </button>
+
+          <button class="sidebar-item ${current === 'profile' ? 'active' : ''}" onclick="window.app.navigate('profile')">
+            <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span>My Profile</span>
+          </button>
+        </nav>
+      </div>
+
+      <div class="sidebar-footer">
+        ${user ? `
+          <div class="sidebar-user-card">
+            <img src="${user.avatar}" alt="${user.name}" class="user-avatar" style="width:34px;height:34px;" />
+            <div class="sidebar-user-info">
+              <div class="sidebar-user-name">${user.name}</div>
+              <div class="sidebar-user-role">${user.role === 'admin' ? '👑 Admin' : '🎓 Student'}</div>
+            </div>
+          </div>
+          <button class="btn-outline btn-sm" onclick="window.app.handleLogout()" style="width:100%;color:#DC2626;border-color:#FCA5A5;padding:6px 10px;font-size:12px;">
+            Log Out
+          </button>
+        ` : ''}
+      </div>
+    `;
+  }
+
   // ==========================================
   // VIEW RENDERERS
   // ==========================================
 
   render() {
+    this.updateDevToolbarVisibility();
+    this.renderSidebarNav();
+
     const root = document.getElementById('app-root');
     if (!root) return;
 
@@ -912,6 +1031,7 @@ class CampusHubApp {
 
   renderResourceTable(category) {
     const list = this.store.getResources(category);
+    const isAdmin = this.store.isAdmin();
 
     if (list.length === 0) {
       return `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:12.5px;">No resources uploaded for this category.</div>`;
@@ -927,12 +1047,16 @@ class CampusHubApp {
               <th>Semester</th>
               <th>Year</th>
               <th style="text-align:center;">Open Access</th>
+              ${isAdmin ? `<th style="text-align:center;width:40px;">Admin</th>` : ''}
             </tr>
           </thead>
           <tbody>
             ${list.map(r => `
               <tr>
-                <td style="font-weight:600;">${r.subjectName}</td>
+                <td style="font-weight:600;">
+                  ${r.subjectName}
+                  ${r.fileData ? `<span style="display:inline-block;font-size:9.5px;background:var(--mint);color:var(--primary);padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:600;vertical-align:middle;">PDF</span>` : ''}
+                </td>
                 <td><code style="background:var(--mint);color:var(--primary);padding:2px 5px;border-radius:4px;font-size:11px;">${r.subjectCode}</code></td>
                 <td>${r.semester}</td>
                 <td>${r.year}</td>
@@ -941,6 +1065,13 @@ class CampusHubApp {
                     📄 Open
                   </button>
                 </td>
+                ${isAdmin ? `
+                  <td style="text-align:center;">
+                    <button class="btn-outline btn-sm" onclick="if(confirm('Delete resource ${r.subjectName}?')){window.app.handleDeleteResource('${r.id}');}" style="color:#DC2626;padding:3px 7px;font-size:11px;" title="Delete Resource">
+                      🗑
+                    </button>
+                  </td>
+                ` : ''}
               </tr>
             `).join('')}
           </tbody>
@@ -1532,34 +1663,59 @@ class CampusHubApp {
     `;
   }
 
-  // --- Modal: Upload Resource (Admin only) ---
+  // --- Modal: Upload Resource (Admin only with Real PDF File Drag & Drop) ---
   renderUploadResourceModal() {
     return `
       <div class="modal-overlay" onclick="if(event.target===this)window.app.closeModal()">
         <div class="modal-dialog">
           <div class="modal-header">
-            <h3 class="modal-title">Upload Study Resource</h3>
+            <h3 class="modal-title">Upload Study Resource (PDF)</h3>
             <button class="modal-close-btn" onclick="window.app.closeModal()">✕</button>
           </div>
           <form onsubmit="window.app.handleUploadResourceSubmit(event)">
             <div class="modal-body">
+              <!-- PDF File Upload Zone -->
+              <div class="form-group">
+                <label class="form-label">Attach PDF File</label>
+                <div class="pdf-dropzone" id="pdf-dropzone" onclick="document.getElementById('ur-file').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="window.app.handlePdfDrop(event)">
+                  <div class="pdf-dropzone-icon">📄</div>
+                  <div style="font-size:13px;font-weight:600;color:var(--text-main);">Click to browse or drag & drop PDF here</div>
+                  <div style="font-size:11px;color:var(--text-muted);">PDF files up to 15MB • Solved papers, notes, textbooks</div>
+                </div>
+                <input type="file" id="ur-file" accept="application/pdf,.pdf" style="display:none;" onchange="window.app.handlePdfFileSelect(event)" />
+                <div id="pdf-selected-preview">
+                  ${this.pendingPdfFile ? `
+                    <div class="pdf-file-selected-badge">
+                      <div class="pdf-file-selected-info">
+                        <span>📄</span>
+                        <span>${this.pendingPdfFile.name} (${this.pendingPdfFile.sizeFormatted})</span>
+                      </div>
+                      <button type="button" class="btn-outline btn-sm" onclick="window.app.removePendingPdf(event)" style="color:#DC2626;padding:2px 8px;font-size:11px;">✕ Remove</button>
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+
               <div class="form-group">
                 <label class="form-label">Category</label>
                 <select id="ur-cat" class="form-select">
-                  <option value="Mid-Sem Papers">Mid-Sem Papers</option>
-                  <option value="GTU PYQs">GTU PYQs</option>
-                  <option value="Handwritten Notes">Handwritten Notes</option>
-                  <option value="Reference Books">Reference Books</option>
+                  <option value="Mid-Sem Papers" ${this.currentResourceCategory === 'Mid-Sem Papers' ? 'selected' : ''}>Mid-Sem Papers</option>
+                  <option value="GTU PYQs" ${this.currentResourceCategory === 'GTU PYQs' ? 'selected' : ''}>GTU PYQs</option>
+                  <option value="Handwritten Notes" ${this.currentResourceCategory === 'Handwritten Notes' ? 'selected' : ''}>Handwritten Notes</option>
+                  <option value="Reference Books" ${this.currentResourceCategory === 'Reference Books' ? 'selected' : ''}>Reference Books</option>
                 </select>
               </div>
+
               <div class="form-group">
                 <label class="form-label">Subject Name</label>
-                <input type="text" id="ur-sub" class="form-input" placeholder="e.g. Advanced Java Programming" required />
+                <input type="text" id="ur-sub" class="form-input" placeholder="e.g. Advanced Java Programming" value="${this.pendingPdfFile?.suggestedSubject || ''}" required />
               </div>
+
               <div class="form-group">
                 <label class="form-label">Subject Code</label>
                 <input type="text" id="ur-code" class="form-input" placeholder="e.g. 3160707" required />
               </div>
+
               <div class="form-group">
                 <label class="form-label">Semester</label>
                 <select id="ur-sem" class="form-select">
@@ -1574,10 +1730,12 @@ class CampusHubApp {
                   <option value="All Semesters">All Semesters</option>
                 </select>
               </div>
+
               <div class="form-group">
                 <label class="form-label">Year / Exam Session</label>
-                <input type="text" id="ur-year" class="form-input" placeholder="e.g. Winter 2025" required />
+                <input type="text" id="ur-year" class="form-input" placeholder="e.g. Winter 2025" value="2026" required />
               </div>
+
               <div class="form-group">
                 <label class="form-label">Resource Summary</label>
                 <textarea id="ur-sum" class="form-textarea" placeholder="Key topics covered, syllabus notes, model answers..."></textarea>
@@ -1593,6 +1751,75 @@ class CampusHubApp {
     `;
   }
 
+  handlePdfFileSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    this.processPdfFile(file);
+  }
+
+  handlePdfDrop(e) {
+    e.preventDefault();
+    const dropzone = document.getElementById('pdf-dropzone');
+    if (dropzone) dropzone.classList.remove('dragover');
+
+    const file = e.dataTransfer?.files?.[0];
+    if (!file) return;
+    this.processPdfFile(file);
+  }
+
+  processPdfFile(file) {
+    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+      this.showToast('Please select a valid .pdf file.', 'error');
+      return;
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      this.showToast('PDF file size must be less than 15MB.', 'error');
+      return;
+    }
+
+    const sizeFormatted = file.size > 1024 * 1024 
+      ? (file.size / (1024 * 1024)).toFixed(1) + ' MB'
+      : (file.size / 1024).toFixed(0) + ' KB';
+
+    // Auto clean filename for suggested subject
+    const rawName = file.name.replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ');
+
+    const reader = new FileReader();
+    reader.onload = (loadEvent) => {
+      this.pendingPdfFile = {
+        file: file,
+        name: file.name,
+        sizeFormatted: sizeFormatted,
+        dataUrl: loadEvent.target.result,
+        suggestedSubject: rawName
+      };
+
+      const subInput = document.getElementById('ur-sub');
+      if (subInput && !subInput.value.trim()) {
+        subInput.value = rawName;
+      }
+
+      this.render();
+      this.showToast(`Attached PDF: ${file.name} (${sizeFormatted})`, 'success');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  removePendingPdf(e) {
+    if (e) e.stopPropagation();
+    this.pendingPdfFile = null;
+    this.render();
+  }
+
+  handleDeleteResource(resourceId) {
+    const ok = this.store.deleteResource(resourceId);
+    if (ok) {
+      this.showToast('Academic resource removed successfully.', 'info');
+      this.render();
+    }
+  }
+
   handleUploadResourceSubmit(e) {
     e.preventDefault();
     const category = document.getElementById('ur-cat')?.value;
@@ -1602,17 +1829,25 @@ class CampusHubApp {
     const year = document.getElementById('ur-year')?.value;
     const summary = document.getElementById('ur-sum')?.value;
 
+    const fileName = this.pendingPdfFile ? this.pendingPdfFile.name : `${subjectCode}_Academic_Paper.pdf`;
+    const fileSize = this.pendingPdfFile ? this.pendingPdfFile.sizeFormatted : '2.8 MB';
+    const fileData = this.pendingPdfFile ? this.pendingPdfFile.dataUrl : null;
+
     const res = this.store.addResource({
       category,
       subjectName,
       subjectCode,
       semester,
       year,
-      summary
+      summary,
+      fileName,
+      fileSize,
+      fileData
     });
 
     if (res.success) {
-      this.showToast('Resource uploaded and available under Open Access!', 'success');
+      this.pendingPdfFile = null;
+      this.showToast('PDF Resource published and available under Open Access!', 'success');
       this.closeModal();
     } else {
       this.showToast(res.message, 'error');
@@ -1623,10 +1858,11 @@ class CampusHubApp {
   renderPdfViewerModal() {
     const r = this.modalData;
     if (!r) return '';
+    const isAdmin = this.store.isAdmin();
 
     return `
       <div class="modal-overlay" onclick="if(event.target===this)window.app.closeModal()">
-        <div class="modal-dialog lg" style="max-height:92vh;">
+        <div class="modal-dialog lg" style="max-height:94vh;">
           <!-- Viewer Top Bar -->
           <div class="modal-header" style="background:var(--primary);color:#FFFFFF;">
             <div style="display:flex;align-items:center;gap:8px;">
@@ -1640,60 +1876,82 @@ class CampusHubApp {
           </div>
 
           <!-- Document Render Area -->
-          <div class="modal-body" style="background:#525659;padding:16px;overflow-y:auto;max-height:65vh;">
-            <div style="background:#FFFFFF;border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,0.3);padding:30px 24px;min-height:480px;display:flex;flex-direction:column;gap:14px;color:#111;">
-              
-              <!-- PDF Header Simulation -->
-              <div style="border-bottom:2px solid #111;padding-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
-                <div>
-                  <div style="font-size:16px;font-weight:700;letter-spacing:-0.3px;">GUJARAT TECHNOLOGICAL UNIVERSITY</div>
-                  <div style="font-size:12px;font-weight:600;color:#444;">ACADEMIC REPOSITORY & EXAMINATION PORTAL</div>
-                </div>
-                <div style="text-align:right;font-size:11.5px;color:#555;">
-                  <div>Code: <strong>${r.subjectCode}</strong></div>
-                  <div>${r.semester}</div>
-                </div>
+          <div class="modal-body" style="background:#525659;padding:12px;overflow-y:auto;max-height:68vh;">
+            ${r.fileData ? `
+              <!-- Real Embedded PDF Frame -->
+              <div style="background:#FFFFFF;border-radius:6px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,0.3);min-height:540px;display:flex;flex-direction:column;">
+                <iframe src="${r.fileData}#toolbar=1" width="100%" height="540px" style="border:none;flex:1;min-height:540px;" title="${r.subjectName}"></iframe>
               </div>
+            ` : `
+              <!-- High-Fidelity GTU Exam Sheet Simulation -->
+              <div style="background:#FFFFFF;border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,0.3);padding:30px 24px;min-height:480px;display:flex;flex-direction:column;gap:14px;color:#111;">
+                
+                <!-- PDF Header Simulation -->
+                <div style="border-bottom:2px solid #111;padding-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+                  <div>
+                    <div style="font-size:16px;font-weight:700;letter-spacing:-0.3px;">GUJARAT TECHNOLOGICAL UNIVERSITY</div>
+                    <div style="font-size:12px;font-weight:600;color:#444;">ACADEMIC REPOSITORY & EXAMINATION PORTAL</div>
+                  </div>
+                  <div style="text-align:right;font-size:11.5px;color:#555;">
+                    <div>Code: <strong>${r.subjectCode}</strong></div>
+                    <div>${r.semester}</div>
+                  </div>
+                </div>
 
-              <!-- Document Title & Meta -->
-              <div style="text-align:center;padding:8px 0;">
-                <h2 style="font-size:17px;font-weight:800;color:var(--primary);">${r.subjectName}</h2>
-                <div style="font-size:12.5px;color:#555;margin-top:2px;">Official Document • ${r.category} (${r.year})</div>
-              </div>
-
-              <!-- Synopsis / Question Paper Excerpt -->
-              <div style="background:#F9FBFB;border:1px solid #E1E8E5;border-radius:6px;padding:14px;font-size:13px;line-height:1.5;">
-                <div style="font-weight:700;color:#222;margin-bottom:6px;">Document Summary & Key Topics:</div>
-                <p style="color:#444;">${r.summary || 'Official GTU course curriculum examination questions, detailed marking rubrics, and solved solutions for student revision.'}</p>
-              </div>
-
-              <!-- Sample Rendered Paper Questions -->
-              <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;font-size:13px;">
-                <div style="border-left:3px solid var(--primary);padding-left:10px;">
-                  <strong>Q1 [7 Marks]:</strong> Explain the core architecture, time complexity bounds, and working mechanism of ${r.subjectName}. Illustrate with relevant block diagram.
+                <!-- Document Title & Meta -->
+                <div style="text-align:center;padding:8px 0;">
+                  <h2 style="font-size:17px;font-weight:800;color:var(--primary);">${r.subjectName}</h2>
+                  <div style="font-size:12.5px;color:#555;margin-top:2px;">Official Document • ${r.category} (${r.year})</div>
                 </div>
-                <div style="border-left:3px solid var(--primary);padding-left:10px;">
-                  <strong>Q2 [7 Marks]:</strong> Differentiate between synchronous and asynchronous implementation methodologies with practical engineering use-cases.
-                </div>
-                <div style="border-left:3px solid var(--primary);padding-left:10px;">
-                  <strong>Q3 [7 Marks]:</strong> Solve the numerical problem based on standard GTU ${r.year} syllabus guidelines.
-                </div>
-              </div>
 
-              <div style="margin-top:auto;padding-top:16px;border-top:1px dashed #CCC;font-size:11px;color:#777;display:flex;justify-content:space-between;">
-                <span>Verified by CampusHub Academic Council</span>
-                <span>Page 1 of 4 • PDF Document</span>
+                <!-- Synopsis / Question Paper Excerpt -->
+                <div style="background:#F9FBFB;border:1px solid #E1E8E5;border-radius:6px;padding:14px;font-size:13px;line-height:1.5;">
+                  <div style="font-weight:700;color:#222;margin-bottom:6px;">Document Summary & Key Topics:</div>
+                  <p style="color:#444;">${r.summary || 'Official GTU course curriculum examination questions, detailed marking rubrics, and solved solutions for student revision.'}</p>
+                </div>
+
+                <!-- Sample Rendered Paper Questions -->
+                <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;font-size:13px;">
+                  <div style="border-left:3px solid var(--primary);padding-left:10px;">
+                    <strong>Q1 [7 Marks]:</strong> Explain the core architecture, time complexity bounds, and working mechanism of ${r.subjectName}. Illustrate with relevant block diagram.
+                  </div>
+                  <div style="border-left:3px solid var(--primary);padding-left:10px;">
+                    <strong>Q2 [7 Marks]:</strong> Differentiate between synchronous and asynchronous implementation methodologies with practical engineering use-cases.
+                  </div>
+                  <div style="border-left:3px solid var(--primary);padding-left:10px;">
+                    <strong>Q3 [7 Marks]:</strong> Solve the numerical problem based on standard GTU ${r.year} syllabus guidelines.
+                  </div>
+                </div>
+
+                <div style="margin-top:auto;padding-top:16px;border-top:1px dashed #CCC;font-size:11px;color:#777;display:flex;justify-content:space-between;">
+                  <span>Verified by CampusHub Academic Council</span>
+                  <span>Page 1 of 4 • PDF Document</span>
+                </div>
               </div>
-            </div>
+            `}
           </div>
 
           <!-- Viewer Footer Actions -->
           <div class="modal-footer" style="justify-content:space-between;">
-            <span style="font-size:12px;color:var(--text-muted);">${r.fileName || 'Document.pdf'} (${r.fileSize || '3.2 MB'})</span>
-            <div style="display:flex;gap:8px;">
-              <button class="btn-primary btn-sm" onclick="window.app.handleDownloadPdf('${r.id}')" style="width:auto;">
-                ⬇ Download PDF
-              </button>
+            <span style="font-size:12px;color:var(--text-muted);">${r.fileName || 'Document.pdf'} (${r.fileSize || '2.8 MB'})</span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              ${r.fileData ? `
+                <a href="${r.fileData}" download="${r.fileName || 'Academic_Resource.pdf'}" class="btn-primary btn-sm" style="width:auto;text-decoration:none;" onclick="window.app.handleDownloadPdf('${r.id}')">
+                  ⬇ Download PDF
+                </a>
+                <button class="btn-outline btn-sm" onclick="window.app.openPdfInNewTab('${r.fileData.replace(/'/g, "\\'")}')">
+                  ↗ New Tab
+                </button>
+              ` : `
+                <button class="btn-primary btn-sm" onclick="window.app.handleDownloadPdf('${r.id}')" style="width:auto;">
+                  ⬇ Download PDF
+                </button>
+              `}
+              ${isAdmin ? `
+                <button class="btn-outline btn-sm" onclick="if(confirm('Delete resource ${r.subjectName}?')){window.app.handleDeleteResource('${r.id}');window.app.closeModal();}" style="color:#DC2626;">
+                  🗑 Delete
+                </button>
+              ` : ''}
               <button class="btn-outline btn-sm" onclick="window.app.closeModal()">
                 Close
               </button>
@@ -1702,6 +1960,28 @@ class CampusHubApp {
         </div>
       </div>
     `;
+  }
+
+  openPdfInNewTab(fileData) {
+    if (!fileData) return;
+    try {
+      if (fileData.startsWith('data:application/pdf;base64,')) {
+        const base64Data = fileData.split(',')[1];
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank');
+      } else {
+        window.open(fileData, '_blank');
+      }
+    } catch (err) {
+      window.open(fileData, '_blank');
+    }
   }
 
   handleDownloadPdf(resourceId) {
@@ -2036,6 +2316,7 @@ class CampusHubApp {
     const currentUser = this.store.getCurrentUser();
     const studentCount = this.store.getStudentAccountsCount();
     const adminCount = this.store.getAdminAccountsCount();
+    const devMode = this.isDevMode();
 
     return `
       <div class="modal-overlay" onclick="if(event.target===this)window.app.closeModal()">
@@ -2076,12 +2357,12 @@ class CampusHubApp {
                     </div>
 
                     <div style="display:flex;gap:6px;">
-                      ${!isActive ? `
-                        <button class="btn-primary btn-sm" onclick="window.app.store.switchUser('${u.id}');window.app.showToast('Switched account to ${u.name}', 'success');window.app.closeModal();">
+                      ${devMode && !isActive ? `
+                        <button class="btn-primary btn-sm" onclick="window.app.store.switchUser('${u.id}');window.app.showToast('Switched account to ${u.name}', 'success');window.app.closeModal();" title="Quick switch (Dev Mode)">
                           Switch
                         </button>
                       ` : ''}
-                      <button class="btn-outline btn-sm" onclick="if(confirm('Delete account ${u.name}?')){window.app.store.deleteUser('${u.id}');window.app.showToast('Account deleted', 'info');}" style="color:#DC2626;padding:4px 8px;">
+                      <button class="btn-outline btn-sm" onclick="if(confirm('Delete account ${u.name}?')){window.app.store.deleteUser('${u.id}');window.app.showToast('Account deleted', 'info');}" style="color:#DC2626;padding:4px 8px;" title="Delete account">
                         🗑
                       </button>
                     </div>
@@ -2089,6 +2370,12 @@ class CampusHubApp {
                 `;
               }).join('')}
             </div>
+
+            ${!devMode ? `
+              <div style="font-size:11.5px;color:var(--text-muted);background:var(--surface-alt);padding:8px 12px;border-radius:var(--radius-xs);border:1px solid var(--border-light);line-height:1.35;">
+                🔒 In standard mode, log out and enter credentials (email + password + CAPTCHA) to switch accounts.
+              </div>
+            ` : ''}
           </div>
 
           <div class="modal-footer">

@@ -2,10 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>CampusHub 1.0 — Your campus, one tap away.</title>
   <meta name="description" content="A unified web platform for college students to manage projects, share academic resources, find collaborators, and stay updated on campus events." />
   
+  <!-- PWA Manifest & Theme Colors -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0F6E56" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
+  <!-- Apple iOS Mobile Web App Support -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="CampusHub" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+
   <!-- Modern Typography: Space Grotesk & Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,10 +30,10 @@
 </head>
 <body>
 
-  <!-- Top Developer / Demo Toolbar -->
-  <header class="dev-toolbar" id="dev-toolbar">
+  <!-- Top Developer / Demo Toolbar (Gated per Fix 3: visible when ?dev=1 or devMode active) -->
+  <header class="dev-toolbar" id="dev-toolbar" style="display: none;">
     <div class="dev-toolbar-info">
-      <span class="brand-title">CampusHub 1.0</span>
+      <span class="brand-title">CampusHub 1.0 <span style="font-size:10px;opacity:0.8;font-weight:normal;">[Dev Mode]</span></span>
       <span class="role-badge" id="role-display-badge">Not Logged In</span>
     </div>
     <div class="dev-toolbar-actions">
@@ -38,10 +52,13 @@
     </div>
   </header>
 
-  <!-- Adaptive App Container (Phone-First Bezel or Responsive Laptop View) -->
+  <!-- Adaptive App Container (Responsive: Mobile / Tablet / Desktop with Sidebar) -->
   <main class="app-frame" id="app-frame">
     <!-- Toast Notification Container -->
     <div class="toast-container" id="toast-container"></div>
+
+    <!-- Desktop Sidebar Navigation (Rendered when logged in on viewport >= 1024px) -->
+    <aside class="sidebar-nav" id="sidebar-nav" style="display: none;"></aside>
 
     <!-- Scrollable Screen Area -->
     <div class="app-screen" id="app-screen">
@@ -56,8 +73,29 @@
   <script type="module" src="js/store.js"></script>
   <script type="module" src="js/app.js"></script>
 
-  <!-- Toolbar Role Badge Realtime Sync -->
+  <!-- PWA Service Worker Registration -->
   <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('js/sw.js')
+          .then(reg => console.log('ServiceWorker registered with scope:', reg.scope))
+          .catch(err => console.warn('ServiceWorker registration error:', err));
+      });
+    }
+  </script>
+
+  <!-- Dev Toolbar Gating & Role Badge Realtime Sync -->
+  <script>
+    function checkDevMode() {
+      const url = new URL(window.location.href);
+      const isDev = url.searchParams.get('dev') === '1' || localStorage.getItem('devMode') === 'true';
+      const devToolbar = document.getElementById('dev-toolbar');
+      if (devToolbar) {
+        devToolbar.style.display = isDev ? 'flex' : 'none';
+      }
+    }
+    checkDevMode();
+
     setInterval(() => {
       if (window.app && window.app.store) {
         try {
