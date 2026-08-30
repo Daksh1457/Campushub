@@ -643,28 +643,34 @@ class CampusHubApp {
       return;
     }
 
-    const res = await this.store.registerUser({
-      name,
-      email,
-      role,
-      enrollment,
-      department,
-      password
-    });
+    try {
+      const res = await this.store.registerUser({
+        name,
+        email,
+        role,
+        enrollment,
+        department,
+        password
+      });
 
-    if (res.success) {
-      this.showToast(`Account created successfully! Welcome, ${res.user.name}`, 'success');
-      this.isLoggedIn = true;
-      this.currentView = 'dashboard';
-      this.render();
-    } else {
-      this.showToast(res.message, 'error');
+      if (res.success && res.user) {
+        this.showToast(`Account created successfully! Welcome, ${res.user.name || 'User'}`, 'success');
+        this.isLoggedIn = true;
+        this.currentView = 'dashboard';
+        this.render();
+      } else {
+        this.showToast(res.message || 'Registration failed.', 'error');
+        this.refreshCaptcha();
+      }
+    } catch (err) {
+      console.error('[CampusHub] Signup error:', err);
+      this.showToast('An unexpected error occurred during signup.', 'error');
       this.refreshCaptcha();
     }
   }
 
   async handleLogin(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     const email = document.getElementById('li-email')?.value;
     const password = document.getElementById('li-pass')?.value;
     const captcha = document.getElementById('li-captcha')?.value;
@@ -682,14 +688,20 @@ class CampusHubApp {
       return;
     }
 
-    const res = await this.store.login(email, password);
-    if (res.success) {
-      this.showToast(`Welcome back, ${res.user.name}!`, 'success');
-      this.isLoggedIn = true;
-      this.currentView = 'dashboard';
-      this.render();
-    } else {
-      this.showToast(res.message, 'error');
+    try {
+      const res = await this.store.login(email, password);
+      if (res.success && res.user) {
+        this.showToast(`Welcome back, ${res.user.name || 'User'}!`, 'success');
+        this.isLoggedIn = true;
+        this.currentView = 'dashboard';
+        this.render();
+      } else {
+        this.showToast(res.message || 'Login failed. Please check your credentials.', 'error');
+        this.refreshCaptcha();
+      }
+    } catch (err) {
+      console.error('[CampusHub] Login error:', err);
+      this.showToast('An unexpected error occurred during login.', 'error');
       this.refreshCaptcha();
     }
   }

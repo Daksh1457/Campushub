@@ -743,11 +743,38 @@ class CampusHubStore {
       });
 
       if (error) {
-        return { success: false, message: error.message };
+        console.error('[CampusHub] Login error:', error.message);
+        let msg = error.message;
+        if (msg.includes('Invalid login credentials')) {
+          msg = 'Invalid email or password. Please check your credentials or click Sign Up to create an account.';
+        } else if (msg.includes('Email not confirmed')) {
+          msg = 'Please verify your email address before logging in, or check Supabase auth settings.';
+        }
+        return { success: false, message: msg };
       }
 
       if (data.user) {
         await this._loadProfile(data.user.id);
+        if (!this.state.currentUser) {
+          console.log('[CampusHub] Creating fallback currentUser for logged in user');
+          const meta = data.user.user_metadata || {};
+          const role = meta.role || 'student';
+          this.state.currentUser = {
+            id: data.user.id,
+            name: meta.full_name || meta.name || data.user.email?.split('@')[0] || 'User',
+            role: role,
+            email: data.user.email || email.trim().toLowerCase(),
+            enrollment: meta.enrollment_number || meta.enrollment || '',
+            department: meta.department || 'Computer Engineering',
+            semester: role === 'admin' ? 'Faculty / HoD' : 'Semester 6',
+            avatar: meta.avatar_url || meta.avatar || (role === 'admin' ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=250&q=80' : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80'),
+            skills: meta.skills || (role === 'admin' ? ['Academic Coordination', 'Research', 'Faculty Advisor'] : ['Frontend Dev', 'UI/UX', 'Python']),
+            bio: meta.bio || `${role === 'admin' ? 'Faculty Admin' : 'Student'} at GTU engineering campus.`
+          };
+          this.state.registeredUsers.push(this.state.currentUser);
+          this.saveState();
+          this.notify();
+        }
         return { success: true, user: this.state.currentUser };
       }
     }
@@ -790,14 +817,12 @@ class CampusHubStore {
     return false;
   }
 
-  async deleteUser(userId) {
+  deleteUser(userId) {
     const sb = getSupabase();
     if (sb) {
-      try {
-        await sb.from('profiles').delete().eq('id', userId);
-      } catch (e) {
+      sb.from('profiles').delete().eq('id', userId).catch(e => {
         console.warn('[CampusHub] Could not delete profile from Supabase:', e);
-      }
+      });
     }
     this.state.registeredUsers = this.state.registeredUsers.filter(u => u.id !== userId);
     if (this.state.currentUser && this.state.currentUser.id === userId) {

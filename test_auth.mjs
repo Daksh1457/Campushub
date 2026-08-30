@@ -3,7 +3,7 @@
  * Tests email validation, Supabase connectivity, and signup/login
  */
 
-const BASE = 'http://localhost:8091';
+const BASE = 'http://localhost:5173';
 const SUPABASE_URL = 'https://dcyeufxjjgwvcljcbqzx.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRjeWV1Znhqamd3dmNsamNicXp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwNzYzMjUsImV4cCI6MjEwMzY1MjMyNX0.s68EJtRLGXsRuamfsPujMlcHcLKaaFCuM8VvROl3EIs';
 
