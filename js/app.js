@@ -11,6 +11,7 @@
 
 import { store } from './store.js';
 
+
 class CampusHubApp {
   constructor() {
     this.store = store;
@@ -48,6 +49,7 @@ class CampusHubApp {
     this.store.subscribe(() => {
       const user = this.store.getCurrentUser();
       this.isLoggedIn = !!user;
+
       this.render();
     });
 
@@ -299,12 +301,14 @@ class CampusHubApp {
   // VIEW RENDERERS
   // ==========================================
 
+
   render() {
     this.updateDevToolbarVisibility();
     this.renderSidebarNav();
 
     const root = document.getElementById('app-root');
     if (!root) return;
+
 
     if (!this.isLoggedIn || this.currentView === 'auth') {
       root.className = 'no-nav';
@@ -316,6 +320,7 @@ class CampusHubApp {
         ${this.renderBottomNav()}
       `;
     }
+
 
     // Render active modal if any
     const modalContainer = document.getElementById('modal-container');
@@ -376,17 +381,18 @@ class CampusHubApp {
 
               <div class="form-group" style="margin-top:10px;">
                 <label class="form-label">College Email ID</label>
-                <input type="email" id="su-email" class="form-input" placeholder="e.g. shiv.patel@svitvasad.ac.in" required />
+                <input type="email" id="su-email" class="form-input" placeholder="e.g. shiv.patel@svitvasad.ac.in" pattern=".*@svitvasad\.ac\.in" required />
+                <span style="font-size:10.5px;color:var(--primary);font-weight:500;">Only @svitvasad.ac.in emails accepted</span>
               </div>
 
               <div class="form-group" style="margin-top:10px;">
                 <label class="form-label">Account Role (Cap: 10 Students / 4 Admins)</label>
                 <select id="su-role" class="form-select" onchange="window.app.handleRoleChange(this.value)">
+
                   <option value="student">Student Account (${studentCount}/10 slots used)</option>
                   <option value="admin">Admin / Faculty Account (${adminCount}/4 slots used)</option>
                 </select>
               </div>
-
               <div class="form-group" id="enrollment-group" style="margin-top:10px;">
                 <label class="form-label" id="lbl-enrollment">College Enrollment Number</label>
                 <input type="text" id="su-enrollment" class="form-input" placeholder="e.g. 210120111045" required />
@@ -448,7 +454,8 @@ class CampusHubApp {
             <form id="login-form" onsubmit="window.app.handleLogin(event)">
               <div class="form-group">
                 <label class="form-label">College Email ID</label>
-                <input type="email" id="li-email" class="form-input" placeholder="e.g. shiv.patel@svitvasad.ac.in" required />
+                <input type="email" id="li-email" class="form-input" placeholder="e.g. shiv.patel@svitvasad.ac.in" pattern=".*@svitvasad\.ac\.in" required />
+                <span style="font-size:10.5px;color:var(--primary);font-weight:500;">Only @svitvasad.ac.in emails accepted</span>
               </div>
 
               <div class="form-group" style="margin-top:10px;">
@@ -587,6 +594,7 @@ class CampusHubApp {
   }
 
   handleRoleChange(role) {
+
     const group = document.getElementById('enrollment-group');
     const input = document.getElementById('su-enrollment');
     if (role === 'admin') {
@@ -608,11 +616,18 @@ class CampusHubApp {
     e.preventDefault();
     const name = document.getElementById('su-name')?.value;
     const email = document.getElementById('su-email')?.value;
-    const role = document.getElementById('su-role')?.value;
-    const enrollment = document.getElementById('su-enrollment')?.value;
+    const role = this.selectedSignUpRole || 'student';
+    const enrollment = document.getElementById('su-enrollment')?.value || '';
     const department = document.getElementById('su-dept')?.value;
     const password = document.getElementById('su-pass')?.value;
     const captcha = document.getElementById('su-captcha')?.value;
+
+    // Validate college email domain
+    const EMAIL_DOMAIN = '@svitvasad.ac.in';
+    if (!email || !email.trim().toLowerCase().endsWith(EMAIL_DOMAIN)) {
+      this.showToast(`Only college emails ending with ${EMAIL_DOMAIN} are allowed.`, 'error');
+      return;
+    }
 
     if (!captcha || captcha.toUpperCase() !== this.captchaCode.toUpperCase()) {
       this.showToast('Invalid CAPTCHA code. Please try again.', 'error');
@@ -620,7 +635,7 @@ class CampusHubApp {
       return;
     }
 
-    const res = this.store.registerUser({
+    const res = await this.store.registerUser({
       name,
       email,
       role,
@@ -646,13 +661,20 @@ class CampusHubApp {
     const password = document.getElementById('li-pass')?.value;
     const captcha = document.getElementById('li-captcha')?.value;
 
+    // Validate college email domain
+    const EMAIL_DOMAIN = '@svitvasad.ac.in';
+    if (!email || !email.trim().toLowerCase().endsWith(EMAIL_DOMAIN)) {
+      this.showToast(`Only college emails ending with ${EMAIL_DOMAIN} are allowed.`, 'error');
+      return;
+    }
+
     if (!captcha || captcha.toUpperCase() !== this.captchaCode.toUpperCase()) {
       this.showToast('Invalid CAPTCHA code. Please try again.', 'error');
       this.refreshCaptcha();
       return;
     }
 
-    const res = this.store.login(email, password);
+    const res = await this.store.login(email, password);
     if (res.success) {
       this.showToast(`Welcome back, ${res.user.name}!`, 'success');
       this.isLoggedIn = true;
@@ -668,6 +690,13 @@ class CampusHubApp {
     e.preventDefault();
     const email = document.getElementById('fp-email')?.value;
     if (!email) return;
+
+    // Validate college email domain
+    const EMAIL_DOMAIN = '@svitvasad.ac.in';
+    if (!email.trim().toLowerCase().endsWith(EMAIL_DOMAIN)) {
+      this.showToast(`Only college emails ending with ${EMAIL_DOMAIN} are allowed.`, 'error');
+      return;
+    }
 
     this.forgotEmail = email.trim();
     this.authMode = 'forgot_otp';
@@ -911,6 +940,7 @@ class CampusHubApp {
                 </div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11.5px;color:var(--text-muted);">
                   <span>By ${p.author} (${p.authorDept || 'Engineering'})</span>
+
                   <button class="btn-outline btn-sm" onclick='window.app.openModal("project_details", ${JSON.stringify(p).replace(/'/g, "&apos;")})'>
                     Details
                   </button>
@@ -1060,6 +1090,7 @@ class CampusHubApp {
                 <td><code style="background:var(--mint);color:var(--primary);padding:2px 5px;border-radius:4px;font-size:11px;">${r.subjectCode}</code></td>
                 <td>${r.semester}</td>
                 <td>${r.year}</td>
+
                 <td style="text-align:center;">
                   <button class="btn-secondary btn-sm" onclick='window.app.openModal("pdf_viewer", ${JSON.stringify(r).replace(/'/g, "&apos;")})' style="padding:4px 10px;font-size:11px;">
                     📄 Open
@@ -1138,6 +1169,7 @@ class CampusHubApp {
                   <span style="font-size:11.5px;color:var(--text-muted);">${post.requestsCount || 0} Request(s)</span>
                   ${isMyPost ? `
                     <span style="font-size:12px;color:var(--primary);font-weight:600;">Your active post</span>
+
                   ` : `
                     <button class="btn-primary btn-sm" onclick='window.app.openModal("send_request", ${JSON.stringify(post).replace(/'/g, "&apos;")})'>
                       Request to Join →
@@ -1236,6 +1268,7 @@ class CampusHubApp {
         </button>
       </div>
 
+
       <div class="app-screen">
         <!-- Centered Profile Header on Mint Band -->
         <div class="profile-hero">
@@ -1314,6 +1347,7 @@ class CampusHubApp {
             </button>
           </div>
         </div>
+
       </div>
     `;
   }
@@ -1813,6 +1847,7 @@ class CampusHubApp {
   }
 
   handleDeleteResource(resourceId) {
+
     const ok = this.store.deleteResource(resourceId);
     if (ok) {
       this.showToast('Academic resource removed successfully.', 'info');
@@ -1939,6 +1974,7 @@ class CampusHubApp {
                 <a href="${r.fileData}" download="${r.fileName || 'Academic_Resource.pdf'}" class="btn-primary btn-sm" style="width:auto;text-decoration:none;" onclick="window.app.handleDownloadPdf('${r.id}')">
                   ⬇ Download PDF
                 </a>
+
                 <button class="btn-outline btn-sm" onclick="window.app.openPdfInNewTab('${r.fileData.replace(/'/g, "\\'")}')">
                   ↗ New Tab
                 </button>
