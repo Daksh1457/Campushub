@@ -759,7 +759,15 @@ class CampusHubStore {
     return false;
   }
 
-  deleteUser(userId) {
+  async deleteUser(userId) {
+    const sb = getSupabase();
+    if (sb) {
+      try {
+        await sb.from('profiles').delete().eq('id', userId);
+      } catch (e) {
+        console.warn('[CampusHub] Could not delete profile from Supabase:', e);
+      }
+    }
     this.state.registeredUsers = this.state.registeredUsers.filter(u => u.id !== userId);
     if (this.state.currentUser && this.state.currentUser.id === userId) {
       this.state.currentUser = this.state.registeredUsers[0] || null;
