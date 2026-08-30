@@ -130,45 +130,64 @@ class CampusHubStore {
     const sb = getSupabase();
     if (!sb) return;
 
-    let { data, error } = await sb.from('profiles').select('*').eq('id', userId).single();
+    let data = null;
+    let error = null;
+
+    try {
+      const res = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
+      data = res.data;
+      error = res.error;
+    } catch (e) {
+      error = e;
+    }
 
     // If profile doesn't exist (trigger may have failed), attempt to insert or read from metadata
     if (error || !data) {
-      const { data: authUser } = await sb.auth.getUser();
-      if (authUser?.user && authUser.user.id === userId) {
-        const meta = authUser.user.user_metadata || {};
-        // Try inserting using Supabase profiles table schema
-        await sb.from('profiles').insert({
-          id: userId,
-          full_name: meta.full_name || meta.name || 'User',
-          role: meta.role || 'student',
-          enrollment_number: meta.enrollment_number || meta.enrollment || '',
-          department: meta.department || 'Computer Engineering',
-          avatar_url: meta.avatar_url || meta.avatar || '',
-          skills: meta.skills || []
-        }).catch(() => null);
+      try {
+        const { data: authUser } = await sb.auth.getUser();
+        if (authUser?.user && authUser.user.id === userId) {
+          const meta = authUser.user.user_metadata || {};
+          // Try inserting using Supabase profiles table schema
+          await sb.from('profiles').insert({
+            id: userId,
+            full_name: meta.full_name || meta.name || 'User',
+            role: meta.role || 'student',
+            enrollment_number: meta.enrollment_number || meta.enrollment || '',
+            department: meta.department || 'Computer Engineering',
+            avatar_url: meta.avatar_url || meta.avatar || '',
+            skills: meta.skills || []
+          });
 
-        ({ data, error } = await sb.from('profiles').select('*').eq('id', userId).single());
+          const retryRes = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
+          data = retryRes.data;
+          error = retryRes.error;
+        }
+      } catch (e) {
+        // Continue to fallback
       }
     }
 
     // Fallback: construct profile from authUser metadata if DB select fails
     if (error || !data) {
       console.warn('[CampusHub] Profile not in DB yet, using session metadata:', error?.message || error);
-      const { data: authUser } = await sb.auth.getUser();
-      if (authUser?.user) {
-        const meta = authUser.user.user_metadata || {};
-        data = {
-          id: userId,
-          full_name: meta.full_name || meta.name || 'User',
-          role: meta.role || 'student',
-          email: authUser.user.email || '',
-          enrollment_number: meta.enrollment_number || meta.enrollment || '',
-          department: meta.department || 'Computer Engineering',
-          avatar_url: meta.avatar_url || meta.avatar || '',
-          skills: meta.skills || []
-        };
-      } else {
+      try {
+        const { data: authUser } = await sb.auth.getUser();
+        if (authUser?.user) {
+          const meta = authUser.user.user_metadata || {};
+          data = {
+            id: userId,
+            full_name: meta.full_name || meta.name || 'User',
+            role: meta.role || 'student',
+            email: authUser.user.email || '',
+            enrollment_number: meta.enrollment_number || meta.enrollment || '',
+            department: meta.department || 'Computer Engineering',
+            avatar_url: meta.avatar_url || meta.avatar || '',
+            skills: meta.skills || []
+          };
+        } else {
+          return;
+        }
+      } catch (e) {
         return;
       }
     }
@@ -548,7 +567,9 @@ class CampusHubStore {
     const sb = getSupabase();
     if (sb) {
       // Sign out current user
-      await sb.auth.signOut().catch(() => {});
+      try {
+        await sb.auth.signOut();
+      } catch (e) {}
 
       // Delete all profiles (except we can't delete auth users from client)
       try {
@@ -692,7 +713,9 @@ class CampusHubStore {
           this.notify();
         } else if (this.state.currentUser.role !== role) {
           console.log('[CampusHub] Fixing role from', this.state.currentUser.role, 'to', role);
-          await sb.from('profiles').update({ role }).eq('id', data.user.id).catch(() => null);
+          try {
+            await sb.from('profiles').update({ role }).eq('id', data.user.id);
+          } catch (e) {}
           this.state.currentUser.role = role;
           const userInList = this.state.registeredUsers.find(u => u.id === data.user.id);
           if (userInList) userInList.role = role;
@@ -820,9 +843,11 @@ class CampusHubStore {
   deleteUser(userId) {
     const sb = getSupabase();
     if (sb) {
-      sb.from('profiles').delete().eq('id', userId).catch(e => {
+      try {
+        sb.from('profiles').delete().eq('id', userId).then(() => {});
+      } catch (e) {
         console.warn('[CampusHub] Could not delete profile from Supabase:', e);
-      });
+      }
     }
     this.state.registeredUsers = this.state.registeredUsers.filter(u => u.id !== userId);
     if (this.state.currentUser && this.state.currentUser.id === userId) {
@@ -1061,7 +1086,9 @@ class CampusHubStore {
   async incrementDownloads(resourceId) {
     const sb = getSupabase();
     if (sb) {
-      await sb.rpc('increment_downloads', { res_id: resourceId }).catch(() => {});
+      try {
+        await sb.rpc('increment_downloads', { res_id: resourceId });
+      } catch (e) {}
     }
     const res = this.state.resources.find(r => r.id === resourceId);
     if (res) { res.downloads = (res.downloads || 0) + 1; this.saveState(); }
