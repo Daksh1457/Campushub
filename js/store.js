@@ -554,8 +554,18 @@ class CampusHubStore {
         if (profiles) {
           currentStudents = profiles.filter(p => p.role === 'student').length;
           currentAdmins = profiles.filter(p => p.role === 'admin').length;
-          // Update local state to match Supabase
-          this.state.registeredUsers = [];
+          // Sync local state with Supabase profiles
+          this.state.registeredUsers = profiles.map(p => ({
+            id: p.id,
+            name: p.full_name || p.name || 'User',
+            role: p.role || 'student',
+            email: p.email || '',
+            enrollment: p.enrollment_number || p.enrollment || '',
+            department: p.department || 'Computer Engineering',
+            avatar: p.avatar_url || p.avatar || '',
+            skills: p.skills || [],
+            bio: p.bio || ''
+          }));
         }
       } catch (e) {
         // Fall back to local count
@@ -589,12 +599,18 @@ class CampusHubStore {
       });
 
       if (error) {
+        console.error('[CampusHub] Signup error:', error.message);
         return { success: false, message: error.message };
       }
 
       if (data.user) {
+        console.log('[CampusHub] Signup success, loading profile for:', data.user.id, 'role:', role);
         // Profile is auto-created by the trigger
         await this._loadProfile(data.user.id);
+        if (!this.state.currentUser) {
+          console.error('[CampusHub] Profile load failed after signup');
+          return { success: false, message: 'Account created but profile could not be loaded. Please try logging in.' };
+        }
         return { success: true, user: this.state.currentUser };
       }
     }
