@@ -72,7 +72,8 @@ class CampusHubStore {
     this.notify();
   }
 
-  // Sync all data from Supabase into local state  async _syncAllData() {
+  // Sync all data from Supabase into local state
+  async _syncAllData() {
     const sb = getSupabase();
     if (!sb) return;
 
