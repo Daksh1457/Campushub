@@ -56,10 +56,11 @@ class CampusHubStore {
           this._cleanupSubscriptions();
           this.saveState();
         }
-      });
-
-      // Subscribe to realtime changes
+      });      // Subscribe to realtime changes
       this._setupRealtimeSubscriptions();
+
+      // Load all data from Supabase
+      await this._syncAllData();
 
       console.log('[CampusHub] Supabase backend connected');
     } catch (err) {
@@ -68,6 +69,60 @@ class CampusHubStore {
     }
 
     this._initialized = true;
+    this.notify();
+  }
+
+  // Sync all data from Supabase into local state
+  async _syncAllData() {
+    const sb = getSupabase();
+    if (!sb) return;
+
+    try {
+      // Projects
+      const { data: projects } = await sb.from('projects').select('*').order('created_at', { ascending: false });
+      if (projects) this.state.projects = projects.map(r => this._mapProjectFromDB(r));
+
+      // Resources
+      const { data: resources } = await sb.from('resources').select('*').order('created_at', { ascending: false });
+      if (resources) this.state.resources = resources.map(r => this._mapResourceFromDB(r));
+
+      // Collaboration posts
+      const { data: collabs } = await sb.from('collaboration_posts').select('*').order('created_at', { ascending: false });
+      if (collabs) this.state.collaborationPosts = collabs.map(r => this._mapCollabFromDB(r));
+
+      // Updates
+      const { data: updates } = await sb.from('updates').select('*').order('created_at', { ascending: false });
+      if (updates) this.state.updateBoard = updates.map(r => this._mapUpdateFromDB(r));
+
+      // Requests
+      if (this.state.currentUser) {
+        const { data: requests } = await sb.from('requests').select('*')
+          .or(`from_user_id.eq.${this.state.currentUser.id},to_user_id.eq.${this.state.currentUser.id}`)
+          .order('created_at', { ascending: false });
+        if (requests) this.state.requests = requests.map(r => this._mapRequestFromDB(r));
+      }
+
+      // Registered users (profiles)
+      const { data: profiles } = await sb.from('profiles').select('*').order('created_at', { ascending: true });
+      if (profiles) {
+        this.state.registeredUsers = profiles.map(p => ({
+          id: p.id,
+          name: p.full_name || p.name || 'User',
+          role: p.role || 'student',
+          email: p.email || '',
+          enrollment: p.enrollment_number || p.enrollment || '',
+          department: p.department || 'Computer Engineering',
+          semester: p.semester || 'Semester 6',
+          avatar: p.avatar_url || p.avatar || '',
+          skills: p.skills || [],
+          bio: p.bio || ''
+        }));
+      }
+
+      this.saveState();
+    } catch (err) {
+      console.warn('[CampusHub] Error syncing data:', err);
+    }
   }
 
   async _loadProfile(userId) {
@@ -675,18 +730,7 @@ class CampusHubStore {
   // =============================================
   // PROJECTS
   // =============================================
-  async getProjects(tab = 'All') {
-    const sb = getSupabase();
-    if (sb) {
-      let query = sb.from('projects').select('*').order('created_at', { ascending: false });
-      if (tab && tab !== 'All') {
-        query = query.eq('category', tab);
-      }
-      const { data, error } = await query;
-      if (!error && data) {
-        this.state.projects = data.map(r => this._mapProjectFromDB(r));
-      }
-    }
+  getProjects(tab = 'All') {
     if (!tab || tab === 'All') return this.state.projects;
     return this.state.projects.filter(p => p.category.toLowerCase() === tab.toLowerCase());
   }
@@ -745,21 +789,7 @@ class CampusHubStore {
   // =============================================
   // RESOURCES
   // =============================================
-  async getResources(category = 'Mid-Sem Papers') {
-    const sb = getSupabase();
-    if (sb) {
-      const { data, error } = await sb.from('resources')
-        .select('*')
-        .eq('category', category)
-        .order('created_at', { ascending: false });
-      if (!error && data) {
-        // Update just this category in state
-        this.state.resources = [
-          ...this.state.resources.filter(r => r.category !== category),
-          ...data.map(r => this._mapResourceFromDB(r))
-        ];
-      }
-    }
+  getResources(category = 'Mid-Sem Papers') {
     return this.state.resources.filter(r => r.category === category);
   }
 
@@ -838,16 +868,7 @@ class CampusHubStore {
   // =============================================
   // COLLABORATION POSTS
   // =============================================
-  async getCollabPosts() {
-    const sb = getSupabase();
-    if (sb) {
-      const { data, error } = await sb.from('collaboration_posts')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data) {
-        this.state.collaborationPosts = data.map(r => this._mapCollabFromDB(r));
-      }
-    }
+  getCollabPosts() {
     return this.state.collaborationPosts;
   }
 
@@ -921,9 +942,14 @@ class CampusHubStore {
     );
   }
 
-  async getReceivedRequests() {
-    if (!this.state.currentUser) return [];
+  getReceivedRequests() {
+    return this.state.requests.filter(r =>
+      r.toUser && r.toUser.id === this.state.currentUser?.id && r.status === 'pending'
+    );
+  }
 
+  async _syncReceivedRequests() {
+    if (!this.state.currentUser) return;
     const sb = getSupabase();
     if (sb) {
       const { data } = await sb.from('requests')
@@ -933,7 +959,6 @@ class CampusHubStore {
         .order('created_at', { ascending: false });
       if (data) {
         const mapped = data.map(r => this._mapRequestFromDB(r));
-        // Merge without duplicating
         mapped.forEach(m => {
           if (!this.state.requests.find(r => r.id === m.id)) {
             this.state.requests.push(m);
@@ -1110,18 +1135,11 @@ class CampusHubStore {
   // =============================================
   // UPDATE BOARD
   // =============================================
-  async getUpdates() {
-    const sb = getSupabase();
-    if (sb) {
-      const { data } = await sb.from('updates').select('*').order('created_at', { ascending: false });
-      if (data) {
-        this.state.updateBoard = data.map(r => this._mapUpdateFromDB(r));
-      }
-    }
+  getUpdates() {
     return this.state.updateBoard;
   }
 
-  async getUnreadUpdatesCount() {
+  getUnreadUpdatesCount() {
     return this.state.updateBoard.filter(u => u.isNew).length;
   }
 
@@ -1322,45 +1340,23 @@ class CampusHubStore {
   }
 
   // =============================================
-  // GET ACCOUNT COUNTS
+  // GET ACCOUNT COUNTS (synchronous — uses local state for rendering)
   // =============================================
-  async getStudentAccountsCount() {
-    const sb = getSupabase();
-    if (sb) {
-      const { count } = await sb.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student');
-      return count || 0;
+  getStudentAccountsCount() {
+    if (this.state.registeredUsers && this.state.registeredUsers.length > 0) {
+      return this.state.registeredUsers.filter(u => u.role === 'student').length;
     }
-    return this.state.registeredUsers.filter(u => u.role === 'student').length;
+    return 0;
   }
 
-  async getAdminAccountsCount() {
-    const sb = getSupabase();
-    if (sb) {
-      const { count } = await sb.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
-      return count || 0;
+  getAdminAccountsCount() {
+    if (this.state.registeredUsers && this.state.registeredUsers.length > 0) {
+      return this.state.registeredUsers.filter(u => u.role === 'admin').length;
     }
-    return this.state.registeredUsers.filter(u => u.role === 'admin').length;
+    return 0;
   }
 
-  async getRegisteredUsers() {
-    const sb = getSupabase();
-    if (sb) {
-      const { data } = await sb.from('profiles').select('*').order('created_at', { ascending: true });
-      if (data) {
-        this.state.registeredUsers = data.map(p => ({
-          id: p.id,
-          name: p.full_name || p.name || 'User',
-          role: p.role || 'student',
-          email: p.email || '',
-          enrollment: p.enrollment_number || p.enrollment || '',
-          department: p.department || 'Computer Engineering',
-          semester: p.semester || 'Semester 6',
-          avatar: p.avatar_url || p.avatar || '',
-          skills: p.skills || [],
-          bio: p.bio || ''
-        }));
-      }
-    }
+  getRegisteredUsers() {
     return this.state.registeredUsers;
   }
 }

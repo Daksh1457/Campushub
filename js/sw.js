@@ -2,7 +2,7 @@
  * CampusHub 1.0 — Cache-First PWA Service Worker
  */
 
-const CACHE_NAME = 'campushub-v1';
+const CACHE_NAME = 'campushub-v2';
 const ASSETS = [
   './',
   './index.html',
