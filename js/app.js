@@ -113,7 +113,7 @@ class CampusHubApp {
 
     // If navigating to update board, mark updates as read to clear coral badge
     if (view === 'updateboard') {
-      this.store.markUpdatesAsRead();
+      this.store.markUpdatesAsRead().catch(() => {});
     }
 
     this.activeModal = null;
@@ -182,7 +182,7 @@ class CampusHubApp {
     }
   }
 
-  toggleUserRole() {
+  async toggleUserRole() {
     const users = this.store.getRegisteredUsers();
     if (users.length === 0) {
       this.showToast('No registered accounts yet. Please Sign Up an account first.', 'info');
@@ -194,7 +194,7 @@ class CampusHubApp {
 
     const current = this.store.getCurrentUser();
     if (!current) {
-      this.store.switchUser(users[0].id);
+      await this.store.switchUser(users[0].id);
       this.showToast(`Logged in as ${users[0].name} (${users[0].role})`, 'success');
       return;
     }
@@ -203,12 +203,18 @@ class CampusHubApp {
     const altUser = users.find(u => u.role === targetRole);
 
     if (altUser) {
-      this.store.switchUser(altUser.id);
+      await this.store.switchUser(altUser.id);
       this.showToast(`Switched to ${targetRole.toUpperCase()}: ${altUser.name}`, 'success');
     } else {
       this.showToast(`No registered ${targetRole} account found. You can add one via Sign Up or Accounts Manager.`, 'info');
       this.openModal('accounts_manager');
     }
+  }
+
+  async quickSwitchUser(userId, userName) {
+    await this.store.switchUser(userId);
+    this.showToast(`Switched account to ${userName}`, 'success');
+    this.closeModal();
   }
 
   // --- Desktop Sidebar Navigation (Fix 1: Desktop >=1024px & Desktop Preview) ---
@@ -716,7 +722,7 @@ class CampusHubApp {
     }
   }
 
-  handleForgotReset(e) {
+  async handleForgotReset(e) {
     e.preventDefault();
     const newPass = document.getElementById('fp-newpass')?.value;
     const confirmPass = document.getElementById('fp-confirmpass')?.value;
@@ -726,7 +732,7 @@ class CampusHubApp {
       return;
     }
 
-    const res = this.store.resetPassword(this.forgotEmail, newPass);
+    const res = await this.store.resetPassword(this.forgotEmail, newPass);
     if (res.success) {
       this.showToast('Password reset successfully! Please log in.', 'success');
       this.authMode = 'login';
@@ -1085,7 +1091,7 @@ class CampusHubApp {
               <tr>
                 <td style="font-weight:600;">
                   ${r.subjectName}
-                  ${r.fileData ? `<span style="display:inline-block;font-size:9.5px;background:var(--mint);color:var(--primary);padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:600;vertical-align:middle;">PDF</span>` : ''}
+                  ${r.fileData ? `<span style="display:inline-block;font-size:9.5px;background:var(--mint);color:var(--primary);padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:600;vertical-align:middle;">${r.fileType || 'PDF'}</span>` : ''}
                 </td>
                 <td><code style="background:var(--mint);color:var(--primary);padding:2px 5px;border-radius:4px;font-size:11px;">${r.subjectCode}</code></td>
                 <td>${r.semester}</td>
@@ -1352,23 +1358,23 @@ class CampusHubApp {
     `;
   }
 
-  handleAddSkill(e) {
+  async handleAddSkill(e) {
     e.preventDefault();
     const input = document.getElementById('new-skill-input');
     if (!input || !input.value.trim()) return;
 
-    this.store.addSkill(input.value.trim());
+    await this.store.addSkill(input.value.trim());
     input.value = '';
     this.showToast('Skill tag added!', 'success');
   }
 
-  handleRemoveSkill(skill) {
-    this.store.removeSkill(skill);
+  async handleRemoveSkill(skill) {
+    await this.store.removeSkill(skill);
     this.showToast(`Removed skill tag: ${skill}`, 'info');
   }
 
-  handleLogout() {
-    this.store.logout();
+  async handleLogout() {
+    await this.store.logout();
     this.isLoggedIn = false;
     this.currentView = 'auth';
     this.authMode = 'login';
@@ -1503,15 +1509,15 @@ class CampusHubApp {
     `;
   }
 
-  handleAcceptRequest(requestId) {
-    const ok = this.store.acceptRequest(requestId);
+  async handleAcceptRequest(requestId) {
+    const ok = await this.store.acceptRequest(requestId);
     if (ok) {
       this.showToast('Collaboration request accepted! 1:1 Chat unlocked.', 'success');
     }
   }
 
-  handleDeclineRequest(requestId) {
-    const ok = this.store.declineRequest(requestId);
+  async handleDeclineRequest(requestId) {
+    const ok = await this.store.declineRequest(requestId);
     if (ok) {
       this.showToast('Request declined and removed.', 'info');
     }
@@ -1636,7 +1642,7 @@ class CampusHubApp {
     `;
   }
 
-  handleUploadProjectSubmit(e) {
+  async handleUploadProjectSubmit(e) {
     e.preventDefault();
     const name = document.getElementById('up-name')?.value;
     const category = document.getElementById('up-cat')?.value;
@@ -1644,7 +1650,7 @@ class CampusHubApp {
     const components = document.getElementById('up-comp')?.value;
     const description = document.getElementById('up-desc')?.value;
 
-    const res = this.store.addProject({
+    const res = await this.store.addProject({
       name,
       category,
       image,
@@ -1697,31 +1703,31 @@ class CampusHubApp {
     `;
   }
 
-  // --- Modal: Upload Resource (Admin only with Real PDF File Drag & Drop) ---
+  // --- Modal: Upload Resource (Admin only with Real File Drag & Drop) ---
   renderUploadResourceModal() {
     return `
       <div class="modal-overlay" onclick="if(event.target===this)window.app.closeModal()">
         <div class="modal-dialog">
           <div class="modal-header">
-            <h3 class="modal-title">Upload Study Resource (PDF)</h3>
+            <h3 class="modal-title">Upload Study Resource</h3>
             <button class="modal-close-btn" onclick="window.app.closeModal()">✕</button>
           </div>
           <form onsubmit="window.app.handleUploadResourceSubmit(event)">
             <div class="modal-body">
-              <!-- PDF File Upload Zone -->
+              <!-- File Upload Zone -->
               <div class="form-group">
-                <label class="form-label">Attach PDF File</label>
-                <div class="pdf-dropzone" id="pdf-dropzone" onclick="document.getElementById('ur-file').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="window.app.handlePdfDrop(event)">
+                <label class="form-label">Attach Document File</label>
+                <div class="pdf-dropzone" id="pdf-dropzone" onclick="document.getElementById('ur-file').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="window.app.handleFileDrop(event)">
                   <div class="pdf-dropzone-icon">📄</div>
-                  <div style="font-size:13px;font-weight:600;color:var(--text-main);">Click to browse or drag & drop PDF here</div>
-                  <div style="font-size:11px;color:var(--text-muted);">PDF files up to 15MB • Solved papers, notes, textbooks</div>
+                  <div style="font-size:13px;font-weight:600;color:var(--text-main);">Click to browse or drag & drop file here</div>
+                  <div style="font-size:11px;color:var(--text-muted);">PDF, Word, PowerPoint, Excel • Up to 15MB</div>
                 </div>
-                <input type="file" id="ur-file" accept="application/pdf,.pdf" style="display:none;" onchange="window.app.handlePdfFileSelect(event)" />
+                <input type="file" id="ur-file" accept="application/pdf,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none;" onchange="window.app.handleFileSelect(event)" />
                 <div id="pdf-selected-preview">
                   ${this.pendingPdfFile ? `
                     <div class="pdf-file-selected-badge">
                       <div class="pdf-file-selected-info">
-                        <span>📄</span>
+                        <span>${this.getFileTypeIcon(this.pendingPdfFile.name)}</span>
                         <span>${this.pendingPdfFile.name} (${this.pendingPdfFile.sizeFormatted})</span>
                       </div>
                       <button type="button" class="btn-outline btn-sm" onclick="window.app.removePendingPdf(event)" style="color:#DC2626;padding:2px 8px;font-size:11px;">✕ Remove</button>
@@ -1785,30 +1791,64 @@ class CampusHubApp {
     `;
   }
 
-  handlePdfFileSelect(e) {
+  handleFileSelect(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    this.processPdfFile(file);
+    this.processFile(file);
   }
 
-  handlePdfDrop(e) {
+  handleFileDrop(e) {
     e.preventDefault();
     const dropzone = document.getElementById('pdf-dropzone');
     if (dropzone) dropzone.classList.remove('dragover');
 
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
-    this.processPdfFile(file);
+    this.processFile(file);
   }
 
-  processPdfFile(file) {
-    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-      this.showToast('Please select a valid .pdf file.', 'error');
+  getFileTypeLabel(file) {
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.pdf')) return 'PDF';
+    if (name.endsWith('.doc') || name.endsWith('.docx')) return 'Word';
+    if (name.endsWith('.ppt') || name.endsWith('.pptx')) return 'PPT';
+    if (name.endsWith('.xls') || name.endsWith('.xlsx')) return 'Excel';
+    return 'File';
+  }
+
+  getFileTypeIcon(fileName) {
+    if (!fileName) return '📄';
+    const name = fileName.toLowerCase();
+    if (name.endsWith('.pdf')) return '📄';
+    if (name.endsWith('.doc') || name.endsWith('.docx')) return '📝';
+    if (name.endsWith('.ppt') || name.endsWith('.pptx')) return '📊';
+    if (name.endsWith('.xls') || name.endsWith('.xlsx')) return '📈';
+    return '📄';
+  }
+
+  isAcceptedFileType(file) {
+    const name = file.name.toLowerCase();
+    const acceptedExtensions = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx'];
+    const acceptedMimes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    return acceptedExtensions.some(ext => name.endsWith(ext)) || acceptedMimes.includes(file.type);
+  }
+
+  processFile(file) {
+    if (!this.isAcceptedFileType(file)) {
+      this.showToast('Please select a PDF, Word, PowerPoint, or Excel file.', 'error');
       return;
     }
 
     if (file.size > 15 * 1024 * 1024) {
-      this.showToast('PDF file size must be less than 15MB.', 'error');
+      this.showToast('File size must be less than 15MB.', 'error');
       return;
     }
 
@@ -1816,8 +1856,10 @@ class CampusHubApp {
       ? (file.size / (1024 * 1024)).toFixed(1) + ' MB'
       : (file.size / 1024).toFixed(0) + ' KB';
 
+    const fileType = this.getFileTypeLabel(file);
+
     // Auto clean filename for suggested subject
-    const rawName = file.name.replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ');
+    const rawName = file.name.replace(/\.[^.]+$/i, '').replace(/[-_]+/g, ' ');
 
     const reader = new FileReader();
     reader.onload = (loadEvent) => {
@@ -1826,7 +1868,8 @@ class CampusHubApp {
         name: file.name,
         sizeFormatted: sizeFormatted,
         dataUrl: loadEvent.target.result,
-        suggestedSubject: rawName
+        suggestedSubject: rawName,
+        fileType: fileType
       };
 
       const subInput = document.getElementById('ur-sub');
@@ -1835,7 +1878,7 @@ class CampusHubApp {
       }
 
       this.render();
-      this.showToast(`Attached PDF: ${file.name} (${sizeFormatted})`, 'success');
+      this.showToast(`Attached ${fileType}: ${file.name} (${sizeFormatted})`, 'success');
     };
     reader.readAsDataURL(file);
   }
@@ -1846,16 +1889,17 @@ class CampusHubApp {
     this.render();
   }
 
-  handleDeleteResource(resourceId) {
-
-    const ok = this.store.deleteResource(resourceId);
-    if (ok) {
+  async handleDeleteResource(resourceId) {
+    const ok = await this.store.deleteResource(resourceId);
+    if (ok && ok.success) {
       this.showToast('Academic resource removed successfully.', 'info');
       this.render();
+    } else if (ok && ok.message) {
+      this.showToast(ok.message, 'error');
     }
   }
 
-  handleUploadResourceSubmit(e) {
+  async handleUploadResourceSubmit(e) {
     e.preventDefault();
     const category = document.getElementById('ur-cat')?.value;
     const subjectName = document.getElementById('ur-sub')?.value;
@@ -1864,11 +1908,12 @@ class CampusHubApp {
     const year = document.getElementById('ur-year')?.value;
     const summary = document.getElementById('ur-sum')?.value;
 
-    const fileName = this.pendingPdfFile ? this.pendingPdfFile.name : `${subjectCode}_Academic_Paper.pdf`;
+    const fileName = this.pendingPdfFile ? this.pendingPdfFile.name : `${subjectCode}_Academic_Resource.pdf`;
     const fileSize = this.pendingPdfFile ? this.pendingPdfFile.sizeFormatted : '2.8 MB';
     const fileData = this.pendingPdfFile ? this.pendingPdfFile.dataUrl : null;
+    const fileType = this.pendingPdfFile ? this.pendingPdfFile.fileType : 'PDF';
 
-    const res = this.store.addResource({
+    const res = await this.store.addResource({
       category,
       subjectName,
       subjectCode,
@@ -1877,23 +1922,27 @@ class CampusHubApp {
       summary,
       fileName,
       fileSize,
-      fileData
+      fileData,
+      fileType
     });
 
     if (res.success) {
       this.pendingPdfFile = null;
-      this.showToast('PDF Resource published and available under Open Access!', 'success');
+      this.showToast('Resource published and available under Open Access!', 'success');
       this.closeModal();
     } else {
       this.showToast(res.message, 'error');
     }
   }
 
-  // --- Modal: Interactive Document / PDF Viewer (Open Access) ---
+  // --- Modal: Interactive Document / Resource Viewer (Open Access) ---
   renderPdfViewerModal() {
     const r = this.modalData;
     if (!r) return '';
     const isAdmin = this.store.isAdmin();
+    const fileType = r.fileType || 'PDF';
+    const isPdf = fileType === 'PDF' && r.fileData && r.fileData.startsWith('data:application/pdf');
+    const icon = this.getFileTypeIcon(r.fileName);
 
     return `
       <div class="modal-overlay" onclick="if(event.target===this)window.app.closeModal()">
@@ -1901,7 +1950,7 @@ class CampusHubApp {
           <!-- Viewer Top Bar -->
           <div class="modal-header" style="background:var(--primary);color:#FFFFFF;">
             <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:18px;">📄</span>
+              <span style="font-size:18px;">${icon}</span>
               <div>
                 <h3 class="modal-title" style="color:#FFFFFF;font-size:14px;">${r.subjectName}</h3>
                 <div style="font-size:11px;opacity:0.85;">${r.subjectCode} • ${r.category} • ${r.year}</div>
@@ -1912,10 +1961,28 @@ class CampusHubApp {
 
           <!-- Document Render Area -->
           <div class="modal-body" style="background:#525659;padding:12px;overflow-y:auto;max-height:68vh;">
-            ${r.fileData ? `
+            ${isPdf ? `
               <!-- Real Embedded PDF Frame -->
               <div style="background:#FFFFFF;border-radius:6px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,0.3);min-height:540px;display:flex;flex-direction:column;">
                 <iframe src="${r.fileData}#toolbar=1" width="100%" height="540px" style="border:none;flex:1;min-height:540px;" title="${r.subjectName}"></iframe>
+              </div>
+            ` : r.fileData ? `
+              <!-- Non-PDF file info card with download -->
+              <div style="background:#FFFFFF;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,0.3);padding:40px 30px;min-height:400px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;">
+                <div style="font-size:64px;">${icon}</div>
+                <div style="font-size:20px;font-weight:700;color:var(--text-main);">${r.fileName || 'Document'}</div>
+                <div style="font-size:13px;color:var(--text-muted);">${fileType} Document • ${r.fileSize || 'Unknown size'}</div>
+                <div style="background:var(--mint-light);border:1px solid var(--mint-border);border-radius:8px;padding:12px 16px;font-size:12.5px;color:var(--text-main);max-width:360px;">
+                  ${r.summary || 'This is a ' + fileType + ' document uploaded by the admin. Click download below to save it to your device.'}
+                </div>
+                <div style="display:flex;gap:10px;margin-top:8px;">
+                  <a href="${r.fileData}" download="${r.fileName}" class="btn-primary btn-sm" style="width:auto;text-decoration:none;padding:10px 20px;font-size:13px;" onclick="window.app.handleDownloadPdf('${r.id}')">
+                    ⬇ Download ${fileType}
+                  </a>
+                  <button class="btn-outline btn-sm" onclick="window.app.openPdfInNewTab('${r.fileData.replace(/'/g, "\\'")}')" style="padding:10px 20px;font-size:13px;">
+                    ↗ Open in New Tab
+                  </button>
+                </div>
               </div>
             ` : `
               <!-- High-Fidelity GTU Exam Sheet Simulation -->
@@ -1968,19 +2035,20 @@ class CampusHubApp {
 
           <!-- Viewer Footer Actions -->
           <div class="modal-footer" style="justify-content:space-between;">
-            <span style="font-size:12px;color:var(--text-muted);">${r.fileName || 'Document.pdf'} (${r.fileSize || '2.8 MB'})</span>
+            <span style="font-size:12px;color:var(--text-muted);">${r.fileName || 'Document'} (${r.fileSize || 'Unknown'})</span>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               ${r.fileData ? `
-                <a href="${r.fileData}" download="${r.fileName || 'Academic_Resource.pdf'}" class="btn-primary btn-sm" style="width:auto;text-decoration:none;" onclick="window.app.handleDownloadPdf('${r.id}')">
-                  ⬇ Download PDF
+                <a href="${r.fileData}" download="${r.fileName || 'Academic_Resource'}" class="btn-primary btn-sm" style="width:auto;text-decoration:none;" onclick="window.app.handleDownloadPdf('${r.id}')">
+                  ⬇ Download
                 </a>
-
-                <button class="btn-outline btn-sm" onclick="window.app.openPdfInNewTab('${r.fileData.replace(/'/g, "\\'")}')">
-                  ↗ New Tab
-                </button>
+                ${isPdf ? `
+                  <button class="btn-outline btn-sm" onclick="window.app.openPdfInNewTab('${r.fileData.replace(/'/g, "\\'")}')">
+                    ↗ New Tab
+                  </button>
+                ` : ''}
               ` : `
                 <button class="btn-primary btn-sm" onclick="window.app.handleDownloadPdf('${r.id}')" style="width:auto;">
-                  ⬇ Download PDF
+                  ⬇ Download
                 </button>
               `}
               ${isAdmin ? `
@@ -2001,15 +2069,25 @@ class CampusHubApp {
   openPdfInNewTab(fileData) {
     if (!fileData) return;
     try {
-      if (fileData.startsWith('data:application/pdf;base64,')) {
+      if (fileData.startsWith('data:')) {
         const base64Data = fileData.split(',')[1];
+        const metaPart = fileData.split(';')[0] || '';
+        let mimeType = 'application/pdf';
+        if (metaPart.includes('msword')) mimeType = 'application/msword';
+        else if (metaPart.includes('wordprocessingml')) mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        else if (metaPart.includes('ms-powerpoint')) mimeType = 'application/vnd.ms-powerpoint';
+        else if (metaPart.includes('presentationml')) mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+        else if (metaPart.includes('ms-excel')) mimeType = 'application/vnd.ms-excel';
+        else if (metaPart.includes('spreadsheetml')) mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        else if (metaPart.includes('application/pdf')) mimeType = 'application/pdf';
+
         const byteCharacters = atob(base64Data);
         const byteNumbers = new Array(byteCharacters.length);
         for (let i = 0; i < byteCharacters.length; i++) {
           byteNumbers[i] = byteCharacters.charCodeAt(i);
         }
         const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'application/pdf' });
+        const blob = new Blob([byteArray], { type: mimeType });
         const blobUrl = URL.createObjectURL(blob);
         window.open(blobUrl, '_blank');
       } else {
@@ -2021,7 +2099,7 @@ class CampusHubApp {
   }
 
   handleDownloadPdf(resourceId) {
-    this.store.incrementDownloads(resourceId);
+    this.store.incrementDownloads(resourceId).catch(() => {});
     this.showToast('Starting file download for academic resource...', 'success');
   }
 
@@ -2063,7 +2141,7 @@ class CampusHubApp {
     `;
   }
 
-  handleAddCollabPostSubmit(e) {
+  async handleAddCollabPostSubmit(e) {
     e.preventDefault();
     const roleNeeded = document.getElementById('cp-role')?.value;
     const title = document.getElementById('cp-title')?.value;
@@ -2072,7 +2150,7 @@ class CampusHubApp {
 
     const tags = rawTags.split(',').map(t => t.trim()).filter(t => t.length > 0);
 
-    const res = this.store.addCollabPost({
+    const res = await this.store.addCollabPost({
       roleNeeded,
       title,
       description,
@@ -2120,10 +2198,10 @@ class CampusHubApp {
     `;
   }
 
-  handleSendRequestSubmit(e, postId) {
+  async handleSendRequestSubmit(e, postId) {
     e.preventDefault();
     const note = document.getElementById('req-note')?.value;
-    const res = this.store.sendCollabRequest(postId, note);
+    const res = await this.store.sendCollabRequest(postId, note);
 
     if (res.success) {
       this.showToast('Collaboration request sent! Check Requests tab for status.', 'success');
@@ -2181,7 +2259,7 @@ class CampusHubApp {
     `;
   }
 
-  handlePostUpdateSubmit(e) {
+  async handlePostUpdateSubmit(e) {
     e.preventDefault();
     const title = document.getElementById('pu-title')?.value;
     const category = document.getElementById('pu-cat')?.value;
@@ -2189,7 +2267,7 @@ class CampusHubApp {
     const image = document.getElementById('pu-img')?.value;
     const link = document.getElementById('pu-link')?.value;
 
-    const res = this.store.addUpdate({
+    const res = await this.store.addUpdate({
       title,
       category,
       message,
@@ -2250,7 +2328,7 @@ class CampusHubApp {
     `;
   }
 
-  handleEditProfileSubmit(e) {
+  async handleEditProfileSubmit(e) {
     e.preventDefault();
     const name = document.getElementById('ep-name')?.value;
     const enrollment = document.getElementById('ep-enrollment')?.value;
@@ -2258,7 +2336,7 @@ class CampusHubApp {
     const avatar = document.getElementById('ep-avatar')?.value;
     const bio = document.getElementById('ep-bio')?.value;
 
-    this.store.updateProfile({
+    await this.store.updateProfile({
       name,
       enrollment,
       department,
@@ -2332,13 +2410,16 @@ class CampusHubApp {
     `;
   }
 
-  handleSendMessage(e, peerId) {
+  async handleSendMessage(e, peerId) {
     e.preventDefault();
     const input = document.getElementById('chat-input-text');
     if (!input || !input.value.trim()) return;
 
-    this.store.sendMessage(peerId, input.value.trim());
+    const text = input.value.trim();
     input.value = '';
+
+    await this.store.sendMessage(peerId, text);
+    this.render();
 
     setTimeout(() => {
       const box = document.getElementById('chat-messages-box');
@@ -2394,7 +2475,7 @@ class CampusHubApp {
 
                     <div style="display:flex;gap:6px;">
                       ${devMode && !isActive ? `
-                        <button class="btn-primary btn-sm" onclick="window.app.store.switchUser('${u.id}');window.app.showToast('Switched account to ${u.name}', 'success');window.app.closeModal();" title="Quick switch (Dev Mode)">
+                        <button class="btn-primary btn-sm" onclick="window.app.quickSwitchUser('${u.id}', '${u.name}')" title="Quick switch (Dev Mode)">
                           Switch
                         </button>
                       ` : ''}

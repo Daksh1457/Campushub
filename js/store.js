@@ -343,6 +343,13 @@ class CampusHubStore {
   }
 
   _mapResourceFromDB(row) {
+    const fileName = row.file_name || '';
+    const lowerName = fileName.toLowerCase();
+    let fileType = 'PDF';
+    if (lowerName.endsWith('.doc') || lowerName.endsWith('.docx')) fileType = 'Word';
+    else if (lowerName.endsWith('.ppt') || lowerName.endsWith('.pptx')) fileType = 'PPT';
+    else if (lowerName.endsWith('.xls') || lowerName.endsWith('.xlsx')) fileType = 'Excel';
+
     return {
       id: row.id,
       category: row.category,
@@ -350,9 +357,10 @@ class CampusHubStore {
       subjectCode: row.subject_code,
       semester: row.semester,
       year: row.year,
-      fileName: row.file_name,
+      fileName: fileName,
       fileSize: row.file_size,
       fileData: row.file_url || null,
+      fileType: fileType,
       downloads: row.downloads,
       uploadedBy: row.uploaded_by,
       summary: row.summary
@@ -651,16 +659,9 @@ class CampusHubStore {
 
   getCurrentUser() { return this.state.currentUser; }
 
-  async isAdmin() {
+  isAdmin() {
     if (!this.state.currentUser) return false;
-    if (this.state.currentUser.role === 'admin') return true;
-
-    const sb = getSupabase();
-    if (sb && this.state.currentUser.id) {
-      const { data } = await sb.from('profiles').select('role').eq('id', this.state.currentUser.id).single();
-      return data?.role === 'admin';
-    }
-    return false;
+    return this.state.currentUser.role === 'admin';
   }
 
   // =============================================
@@ -836,6 +837,7 @@ class CampusHubStore {
       fileName: resource.fileName || '',
       fileSize: resource.fileSize || '',
       fileData: resource.fileData || null,
+      fileType: resource.fileType || 'PDF',
       downloads: 0,
       uploadedBy: `Admin (${this.state.currentUser?.name || 'Admin'})`,
       summary: resource.summary || ''
@@ -919,24 +921,8 @@ class CampusHubStore {
   // =============================================
   // REQUESTS
   // =============================================
-  async getSentRequests() {
+  getSentRequests() {
     if (!this.state.currentUser) return [];
-
-    const sb = getSupabase();
-    if (sb) {
-      const { data } = await sb.from('requests')
-        .select('*')
-        .eq('from_user_id', this.state.currentUser.id)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
-      if (data) {
-        this.state.requests = [
-          ...this.state.requests.filter(r => r.fromUser?.id !== this.state.currentUser.id),
-          ...data.map(r => this._mapRequestFromDB(r))
-        ];
-      }
-    }
-
     return this.state.requests.filter(
       r => r.fromUser && r.fromUser.id === this.state.currentUser.id && r.status === 'pending'
     );
@@ -972,26 +958,8 @@ class CampusHubStore {
     );
   }
 
-  async getAcceptedConnections() {
+  getAcceptedConnections() {
     if (!this.state.currentUser) return [];
-
-    const sb = getSupabase();
-    if (sb) {
-      const { data } = await sb.from('requests')
-        .select('*')
-        .or(`from_user_id.eq.${this.state.currentUser.id},to_user_id.eq.${this.state.currentUser.id}`)
-        .eq('status', 'accepted')
-        .order('created_at', { ascending: false });
-      if (data) {
-        const mapped = data.map(r => this._mapRequestFromDB(r));
-        mapped.forEach(m => {
-          if (!this.state.requests.find(r => r.id === m.id)) {
-            this.state.requests.push(m);
-          }
-        });
-      }
-    }
-
     return this.state.requests.filter(
       r => r.status === 'accepted' &&
       ((r.fromUser && r.fromUser.id === this.state.currentUser.id) ||
@@ -1204,26 +1172,7 @@ class CampusHubStore {
   // =============================================
   // CHAT
   // =============================================
-  async getChat(otherUserId) {
-    const sb = getSupabase();
-    if (sb && this.state.currentUser) {
-      const myId = this.state.currentUser.id;
-      const { data } = await sb.from('chat_messages')
-        .select('*')
-        .or(`and(sender_id.eq.${myId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${myId})`)
-        .order('created_at', { ascending: true });
-
-      if (data) {
-        this.state.chats[otherUserId] = data.map(m => ({
-          id: m.id,
-          sender: m.sender_id,
-          senderName: m.sender_name,
-          text: m.text,
-          timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          isSystem: m.is_system
-        }));
-      }
-    }
+  getChat(otherUserId) {
     return this.state.chats[otherUserId] || [];
   }
 
