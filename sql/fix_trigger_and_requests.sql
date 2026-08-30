@@ -1,24 +1,29 @@
 -- =============================================
 -- STEP 1: Fix the profile auto-create trigger
--- Column names match the actual profiles table:
---   id, name, role, email, enrollment, department, semester, avatar, skills, bio, created_at
+-- Matches Supabase profiles table schema:
+--   id, full_name, role, enrollment_number, department, avatar_url, skills
 -- =============================================
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, name, role, email, enrollment, department, avatar, bio)
+  INSERT INTO public.profiles (id, full_name, role, enrollment_number, department, avatar_url, skills)
   VALUES (
     NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', 'User'),
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', 'User'),
     COALESCE(NEW.raw_user_meta_data->>'role', 'student'),
-    NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'enrollment_number', ''),
+    COALESCE(NEW.raw_user_meta_data->>'enrollment_number', NEW.raw_user_meta_data->>'enrollment', ''),
     COALESCE(NEW.raw_user_meta_data->>'department', 'Computer Engineering'),
-    COALESCE(NEW.raw_user_meta_data->>'avatar_url', ''),
-    COALESCE(NEW.raw_user_meta_data->>'bio', '')
-  );
+    COALESCE(NEW.raw_user_meta_data->>'avatar_url', NEW.raw_user_meta_data->>'avatar', ''),
+    '{}'::TEXT[]
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    role = EXCLUDED.role,
+    enrollment_number = EXCLUDED.enrollment_number,
+    department = EXCLUDED.department,
+    avatar_url = EXCLUDED.avatar_url;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -132,47 +132,62 @@ class CampusHubStore {
 
     let { data, error } = await sb.from('profiles').select('*').eq('id', userId).single();
 
-    // If profile doesn't exist (trigger may have failed), create it from auth user metadata
+    // If profile doesn't exist (trigger may have failed), attempt to insert or read from metadata
     if (error || !data) {
       const { data: authUser } = await sb.auth.getUser();
       if (authUser?.user && authUser.user.id === userId) {
         const meta = authUser.user.user_metadata || {};
-        const { error: insertError } = await sb.from('profiles').insert({
+        // Try inserting using Supabase profiles table schema
+        await sb.from('profiles').insert({
           id: userId,
-          name: meta.full_name || meta.name || 'User',
+          full_name: meta.full_name || meta.name || 'User',
           role: meta.role || 'student',
-          email: authUser.user.email || '',
-          enrollment: meta.enrollment_number || meta.enrollment || '',
+          enrollment_number: meta.enrollment_number || meta.enrollment || '',
           department: meta.department || 'Computer Engineering',
-          avatar: meta.avatar_url || meta.avatar || '',
-          bio: meta.bio || ''
-        });
-        if (!insertError) {
-          ({ data, error } = await sb.from('profiles').select('*').eq('id', userId).single());
-        }
+          avatar_url: meta.avatar_url || meta.avatar || '',
+          skills: meta.skills || []
+        }).catch(() => null);
+
+        ({ data, error } = await sb.from('profiles').select('*').eq('id', userId).single());
       }
     }
 
+    // Fallback: construct profile from authUser metadata if DB select fails
     if (error || !data) {
-      console.warn('[CampusHub] Failed to load profile:', error);
-      return;
+      console.warn('[CampusHub] Profile not in DB yet, using session metadata:', error?.message || error);
+      const { data: authUser } = await sb.auth.getUser();
+      if (authUser?.user) {
+        const meta = authUser.user.user_metadata || {};
+        data = {
+          id: userId,
+          full_name: meta.full_name || meta.name || 'User',
+          role: meta.role || 'student',
+          email: authUser.user.email || '',
+          enrollment_number: meta.enrollment_number || meta.enrollment || '',
+          department: meta.department || 'Computer Engineering',
+          avatar_url: meta.avatar_url || meta.avatar || '',
+          skills: meta.skills || []
+        };
+      } else {
+        return;
+      }
     }
 
-    // Map from DB columns to app format
+    // Map from DB columns to app format (supports both full_name/name, enrollment_number/enrollment)
     this.state.currentUser = {
       id: data.id,
-      name: data.name || 'User',
+      name: data.full_name || data.name || 'User',
       role: data.role || 'student',
-      email: data.email || '',
-      enrollment: data.enrollment || '',
+      email: data.email || (this.state.registeredUsers.find(u => u.id === data.id)?.email) || '',
+      enrollment: data.enrollment_number || data.enrollment || '',
       department: data.department || 'Computer Engineering',
-      semester: data.semester || 'Semester 6',
-      avatar: data.avatar || '',
+      semester: data.semester || (data.role === 'admin' ? 'Faculty / HoD' : 'Semester 6'),
+      avatar: data.avatar_url || data.avatar || (data.role === 'admin' ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=250&q=80' : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80'),
       skills: data.skills || [],
-      bio: data.bio || ''
+      bio: data.bio || `${data.role === 'admin' ? 'Faculty Admin' : 'Student'} at GTU engineering campus.`
     };
 
-    // Cross-check role with auth user metadata (trigger may have defaulted to 'student')
+    // Cross-check role with auth user metadata
     try {
       const { data: authUser } = await sb.auth.getUser();
       const metaRole = authUser?.user?.user_metadata?.role;
@@ -193,6 +208,7 @@ class CampusHubStore {
       this.state.registeredUsers.push(this.state.currentUser);
     }
 
+    this.saveState();
     this.notify();
   }
 
@@ -653,20 +669,35 @@ class CampusHubStore {
 
       if (data.user) {
         console.log('[CampusHub] Signup success, loading profile for:', data.user.id, 'role:', role);
-        // Profile is auto-created by the trigger
         await this._loadProfile(data.user.id);
+
         if (!this.state.currentUser) {
-          console.error('[CampusHub] Profile load failed after signup');
-          return { success: false, message: 'Account created but profile could not be loaded. Please try logging in.' };
-        }
-        // Ensure the role is correct in the database (trigger may have used wrong default)
-        if (this.state.currentUser.role !== role) {
+          console.log('[CampusHub] Creating local currentUser from signup data');
+          this.state.currentUser = {
+            id: data.user.id,
+            name: userData.name.trim(),
+            role: role,
+            email: userData.email.trim().toLowerCase(),
+            enrollment: userData.enrollment ? userData.enrollment.trim() : (role === 'admin' ? 'Admin / Faculty' : ''),
+            department: userData.department || 'Computer Engineering',
+            semester: role === 'admin' ? 'Faculty / HoD' : 'Semester 6',
+            avatar: role === 'admin'
+              ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=250&q=80'
+              : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
+            skills: role === 'admin' ? ['Academic Coordination', 'Research', 'Faculty Advisor'] : ['Frontend Dev', 'UI/UX', 'Python'],
+            bio: `${role === 'admin' ? 'Faculty Admin' : 'Student'} at GTU engineering campus.`
+          };
+          this.state.registeredUsers.push(this.state.currentUser);
+          this.saveState();
+          this.notify();
+        } else if (this.state.currentUser.role !== role) {
           console.log('[CampusHub] Fixing role from', this.state.currentUser.role, 'to', role);
-          await sb.from('profiles').update({ role }).eq('id', data.user.id);
+          await sb.from('profiles').update({ role }).eq('id', data.user.id).catch(() => null);
           this.state.currentUser.role = role;
           const userInList = this.state.registeredUsers.find(u => u.id === data.user.id);
           if (userInList) userInList.role = role;
           this.saveState();
+          this.notify();
         }
         return { success: true, user: this.state.currentUser };
       }
