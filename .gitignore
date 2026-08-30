@@ -7,3 +7,4 @@ desktop.ini
 *.log
 scratch/
 .system_generated/
+node_modules/
