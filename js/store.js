@@ -72,12 +72,12 @@ class CampusHubStore {
     this.notify();
   }
 
-  // Sync all data from Supabase into local state
-  async _syncAllData() {
+  // Sync all data from Supabase into local state  async _syncAllData() {
     const sb = getSupabase();
     if (!sb) return;
 
     try {
+
       // Projects
       const { data: projects } = await sb.from('projects').select('*').order('created_at', { ascending: false });
       if (projects) this.state.projects = projects.map(r => this._mapProjectFromDB(r));
@@ -102,7 +102,7 @@ class CampusHubStore {
         if (requests) this.state.requests = requests.map(r => this._mapRequestFromDB(r));
       }
 
-      // Registered users (profiles)
+      // Registered users (profiles) — replaces localStorage list with Supabase truth
       const { data: profiles } = await sb.from('profiles').select('*').order('created_at', { ascending: true });
       if (profiles) {
         this.state.registeredUsers = profiles.map(p => ({
@@ -129,7 +129,29 @@ class CampusHubStore {
     const sb = getSupabase();
     if (!sb) return;
 
-    const { data, error } = await sb.from('profiles').select('*').eq('id', userId).single();
+    let { data, error } = await sb.from('profiles').select('*').eq('id', userId).single();
+
+    // If profile doesn't exist (trigger may have failed), create it from auth user metadata
+    if (error || !data) {
+      const { data: authUser } = await sb.auth.getUser();
+      if (authUser?.user && authUser.user.id === userId) {
+        const meta = authUser.user.user_metadata || {};
+        const { error: insertError } = await sb.from('profiles').insert({
+          id: userId,
+          name: meta.full_name || meta.name || 'User',
+          role: meta.role || 'student',
+          email: authUser.user.email || '',
+          enrollment: meta.enrollment_number || meta.enrollment || '',
+          department: meta.department || 'Computer Engineering',
+          avatar: meta.avatar_url || '',
+          bio: meta.bio || ''
+        });
+        if (!insertError) {
+          ({ data, error } = await sb.from('profiles').select('*').eq('id', userId).single());
+        }
+      }
+    }
+
     if (error || !data) {
       console.warn('[CampusHub] Failed to load profile:', error);
       return;
@@ -490,21 +512,61 @@ class CampusHubStore {
   getState() { return this.state; }
 
   // =============================================
+  // RESET ALL DATA
+  // =============================================
+  async resetAllData() {
+    const sb = getSupabase();
+    if (sb) {
+      // Sign out current user
+      await sb.auth.signOut().catch(() => {});
+    }
+    // Clear all local state
+    this.state = {
+      registeredUsers: [],
+      currentUser: null,
+      projects: [],
+      resources: [],
+      collaborationPosts: [],
+      requests: [],
+      updateBoard: [],
+      chats: {}
+    };
+    localStorage.removeItem(STORAGE_KEY);
+    this._cleanupSubscriptions();
+    this.notify();
+  }
+
+  // =============================================
   // AUTHENTICATION
   // =============================================
   async registerUser(userData) {
     const role = userData.role || 'student';
-    const currentStudents = this.state.registeredUsers.filter(u => u.role === 'student').length;
-    const currentAdmins = this.state.registeredUsers.filter(u => u.role === 'admin').length;
+
+    // When Supabase is connected, count from profiles table (source of truth)
+    const sb = getSupabase();
+    let currentStudents = this.state.registeredUsers.filter(u => u.role === 'student').length;
+    let currentAdmins = this.state.registeredUsers.filter(u => u.role === 'admin').length;
+
+    if (sb) {
+      try {
+        const { data: profiles } = await sb.from('profiles').select('role');
+        if (profiles) {
+          currentStudents = profiles.filter(p => p.role === 'student').length;
+          currentAdmins = profiles.filter(p => p.role === 'admin').length;
+          // Update local state to match Supabase
+          this.state.registeredUsers = [];
+        }
+      } catch (e) {
+        // Fall back to local count
+      }
+    }
 
     if (role === 'student' && currentStudents >= MAX_STUDENTS) {
-      return { success: false, message: `Maximum student limit reached (${MAX_STUDENTS} students max).` };
+      return { success: false, message: `Maximum student limit reached (${MAX_STUDENTS} students max). You have ${currentStudents} students registered.` };
     }
     if (role === 'admin' && currentAdmins >= MAX_ADMINS) {
-      return { success: false, message: `Maximum admin limit reached (${MAX_ADMINS} admins max).` };
+      return { success: false, message: `Maximum admin limit reached (${MAX_ADMINS} admins max). You have ${currentAdmins} admins registered.` };
     }
-
-    const sb = getSupabase();
 
     if (sb) {
       // Supabase Auth signup

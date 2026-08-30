@@ -46,7 +46,7 @@
       <button class="toolbar-btn" onclick="window.app && window.app.openModal('accounts_manager')" title="Manage 10 Student & 4 Admin Custom Accounts">
         👥 Accounts (10+4)
       </button>
-      <button class="toolbar-btn" onclick="if(confirm('Reset all demo data and accounts to clean state?')){localStorage.clear();location.reload();}" title="Reset to clean state">
+      <button class="toolbar-btn" onclick="if(confirm('Reset ALL data? This clears localStorage and signs out from Supabase.')){window.app.store.resetAllData().then(()=>{window.app.isLoggedIn=false;window.app.currentView='auth';window.app.authMode='signup';window.app.render();window.app.showToast('All data reset. Start fresh with Sign Up.','success');})}" title="Reset to clean state">
         ↺ Reset
       </button>
     </div>
