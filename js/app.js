@@ -612,7 +612,7 @@ class CampusHubApp {
     }
   }
 
-  handleSignUp(e) {
+  async handleSignUp(e) {
     e.preventDefault();
     const name = document.getElementById('su-name')?.value;
     const email = document.getElementById('su-email')?.value;
@@ -655,7 +655,7 @@ class CampusHubApp {
     }
   }
 
-  handleLogin(e) {
+  async handleLogin(e) {
     e.preventDefault();
     const email = document.getElementById('li-email')?.value;
     const password = document.getElementById('li-pass')?.value;

@@ -71,8 +71,10 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   e.respondWith(
-    caches.match(e.request).then((cached) => {
-      return cached || fetch(e.request);
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.match(e.request).then(cached => {
+        return cached || fetch(e.request);
+      });
     })
   );
 });
