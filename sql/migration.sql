@@ -1,5 +1,6 @@
--- CampusHub 1.0 — Supabase Database Migration
+-- CampusHub 1.0 — Supabase Database Migration (Idempotent)
 -- Run this in Supabase SQL Editor (Dashboard → SQL Editor → New Query)
+-- Safe to re-run: uses IF NOT EXISTS and DO blocks for all creates
 
 -- =============================================
 -- 1. PROFILES TABLE (extends Supabase auth.users)
@@ -179,8 +180,8 @@ SELECT * FROM (VALUES
   ('GTU PYQs', 'Software Engineering & Agile Methodologies', '3160713', 'Semester 6', 'Winter 2024', 'GTU_Winter2024_SoftwareEngineering_PYQ.pdf', '1.9 MB', 512, 'Admin (Prof. Rajesh Mehta)', 'Official GTU Winter 2024 university question paper covering Agile Scrum sprints, UML sequence diagrams, software metrics.', '2026-08-01'),
   ('GTU PYQs', 'Microprocessor & Interfacing (MPI)', '3140707', 'Semester 4', 'Summer 2024', 'GTU_Summer2024_Microprocessor_8086_Solved.pdf', '4.2 MB', 630, 'Admin (Prof. Rajesh Mehta)', 'Solved GTU Summer 2024 8086 Assembly code problems, memory interfacing diagrams.', '2026-08-01'),
   ('GTU PYQs', 'Object Oriented Programming with Java', '3120702', 'Semester 2', 'Winter 2023', 'GTU_Winter2023_Java_OOP_PYQ_Solved.pdf', '2.7 MB', 440, 'Admin (Prof. Rajesh Mehta)', 'Complete collection of 70-mark GTU questions on Polymorphism, Exception Handling, Multithreading.', '2026-08-01'),
-  ('Handwritten Notes', 'Theory of Computation & Automata (TOC)', '3150702', 'Semester 5', '2025 Edition', 'TOC_Complete_Handwritten_Notes_ShivPatel.pdf', '8.5 MB', 890, 'Admin (Prof. Rajesh Mehta)', 'Topper handwriting notes covering DFA/NFA conversions, Regular Expressions, Arden''s Theorem, PDA constructions.', '2026-08-01'),
-  ('Handwritten Notes', 'Operating Systems & Linux Kernel Internals', '3140702', 'Semester 4', '2025 Edition', 'OS_Process_Scheduling_Handwritten_Formulas.pdf', '5.6 MB', 720, 'Admin (Prof. Rajesh Mehta)', 'Comprehensive notes on CPU Scheduling algorithms, Semaphores & Mutex, Banker''s Deadlock algorithm.', '2026-08-01'),
+  ('Handwritten Notes', 'Theory of Computation & Automata (TOC)', '3150702', 'Semester 5', '2025 Edition', 'TOC_Complete_Handwritten_Notes_ShivPatel.pdf', '8.5 MB', 890, 'Admin (Prof. Rajesh Mehta)', 'Topper handwriting notes covering DFA/NFA conversions, Regular Expressions, Ardens Theorem, PDA constructions.', '2026-08-01'),
+  ('Handwritten Notes', 'Operating Systems & Linux Kernel Internals', '3140702', 'Semester 4', '2025 Edition', 'OS_Process_Scheduling_Handwritten_Formulas.pdf', '5.6 MB', 720, 'Admin (Prof. Rajesh Mehta)', 'Comprehensive notes on CPU Scheduling algorithms, Semaphores & Mutex, Bankers Deadlock algorithm.', '2026-08-01'),
   ('Reference Books', 'Introduction to Algorithms (CLRS 4th Edition)', 'REF-CS-01', 'All Semesters', 'Core Reference', 'CLRS_Algorithms_4th_Edition_Core_Chapters.pdf', '14.8 MB', 1250, 'Admin (Prof. Rajesh Mehta)', 'Standard reference text by Cormen, Leiserson, Rivest, and Stein covering graph theory, dynamic programming.', '2026-08-01'),
   ('Reference Books', 'Computer Networking: A Top-Down Approach', 'REF-CS-02', 'Semester 5 & 6', 'Core Reference', 'Kurose_Ross_Networking_8th_Ed_Summary.pdf', '11.2 MB', 980, 'Admin (Prof. Rajesh Mehta)', 'In-depth textbook on Application layer, Transport layer, Network routing, and Wireless LANs.', '2026-08-01')
 ) AS v(category, subject_name, subject_code, semester, year, file_name, file_size, downloads, uploaded_by, summary, created_at)
@@ -202,88 +203,60 @@ WHERE NOT EXISTS (SELECT 1 FROM updates LIMIT 1);
 -- 9. REALTIME SUBSCRIPTIONS
 -- =============================================
 -- Enable realtime for tables that need live updates
-ALTER PUBLICATION supabase_realtime ADD TABLE requests;
-ALTER PUBLICATION supabase_realtime ADD TABLE chat_messages;
-ALTER PUBLICATION supabase_realtime ADD TABLE updates;
-ALTER PUBLICATION supabase_realtime ADD TABLE projects;
-ALTER PUBLICATION supabase_realtime ADD TABLE collaboration_posts;
+-- Wrapped in DO blocks to skip if already added
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE requests; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE chat_messages; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE updates; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE projects; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE collaboration_posts; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- =============================================
--- 10. STORAGE BUCKETS
--- =============================================
--- Create storage buckets (run via Supabase Dashboard → Storage → New Bucket)
--- Bucket: pdfs (for resource PDFs)
--- Bucket: avatars (for profile photos)
--- Bucket: project-images (for project images)
-
--- RLS policies for storage
--- (These are created via the Dashboard or SQL)
-
--- =============================================
--- ROW LEVEL SECURITY POLICIES
+-- 10. ROW LEVEL SECURITY POLICIES
 -- =============================================
 
 -- Profiles: anyone can read, only owner can update
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
-CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
+DO $$ BEGIN CREATE POLICY "Profiles are viewable by everyone" ON profiles FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Projects: anyone can read, admins can insert/update/delete
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Projects are viewable by everyone" ON projects FOR SELECT USING (true);
-CREATE POLICY "Admins can insert projects" ON projects FOR INSERT WITH CHECK (
-  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
-);
-CREATE POLICY "Admins can update projects" ON projects FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
-);
-CREATE POLICY "Admins can delete projects" ON projects FOR DELETE USING (
-  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
-);
+DO $$ BEGIN CREATE POLICY "Projects are viewable by everyone" ON projects FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Admins can insert projects" ON projects FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Admins can update projects" ON projects FOR UPDATE USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Admins can delete projects" ON projects FOR DELETE USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Resources: anyone can read, admins can manage
 ALTER TABLE resources ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Resources are viewable by everyone" ON resources FOR SELECT USING (true);
-CREATE POLICY "Admins can insert resources" ON resources FOR INSERT WITH CHECK (
-  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
-);
-CREATE POLICY "Admins can update resources" ON resources FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
-);
-CREATE POLICY "Admins can delete resources" ON resources FOR DELETE USING (
-  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
-);
+DO $$ BEGIN CREATE POLICY "Resources are viewable by everyone" ON resources FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Admins can insert resources" ON resources FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Admins can update resources" ON resources FOR UPDATE USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Admins can delete resources" ON resources FOR DELETE USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Collaboration posts: anyone can read, authenticated users can insert
 ALTER TABLE collaboration_posts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Posts are viewable by everyone" ON collaboration_posts FOR SELECT USING (true);
-CREATE POLICY "Authenticated users can insert posts" ON collaboration_posts FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-CREATE POLICY "Authors can update own posts" ON collaboration_posts FOR UPDATE USING (auth.uid() = author_id);
-CREATE POLICY "Authors can delete own posts" ON collaboration_posts FOR DELETE USING (auth.uid() = author_id);
+DO $$ BEGIN CREATE POLICY "Posts are viewable by everyone" ON collaboration_posts FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Authenticated users can insert posts" ON collaboration_posts FOR INSERT WITH CHECK (auth.uid() IS NOT NULL); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Authors can update own posts" ON collaboration_posts FOR UPDATE USING (auth.uid() = author_id); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Authors can delete own posts" ON collaboration_posts FOR DELETE USING (auth.uid() = author_id); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Requests: sender and receiver can read, authenticated users can insert
 ALTER TABLE requests ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can view own requests" ON requests FOR SELECT USING (
-  auth.uid() = from_user_id OR auth.uid() = to_user_id
-);
-CREATE POLICY "Authenticated users can send requests" ON requests FOR INSERT WITH CHECK (auth.uid() = from_user_id);
-CREATE POLICY "Receiver can update request status" ON requests FOR UPDATE USING (auth.uid() = to_user_id);
-CREATE POLICY "Users can delete own sent requests" ON requests FOR DELETE USING (auth.uid() = from_user_id);
+DO $$ BEGIN CREATE POLICY "Users can view own requests" ON requests FOR SELECT USING (auth.uid() = from_user_id OR auth.uid() = to_user_id); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Authenticated users can send requests" ON requests FOR INSERT WITH CHECK (auth.uid() = from_user_id); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Receiver can update request status" ON requests FOR UPDATE USING (auth.uid() = to_user_id); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Users can delete own sent requests" ON requests FOR DELETE USING (auth.uid() = from_user_id); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Updates: anyone can read, admins can manage
 ALTER TABLE updates ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Updates are viewable by everyone" ON updates FOR SELECT USING (true);
-CREATE POLICY "Admins can insert updates" ON updates FOR INSERT WITH CHECK (
-  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
-);
-CREATE POLICY "Admins can update updates" ON updates FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
-);
+DO $$ BEGIN CREATE POLICY "Updates are viewable by everyone" ON updates FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Admins can insert updates" ON updates FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Admins can update updates" ON updates FOR UPDATE USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Chat messages: only sender and receiver can read
 ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can view own chat messages" ON chat_messages FOR SELECT USING (
-  auth.uid() = sender_id OR auth.uid() = receiver_id
-);
-CREATE POLICY "Authenticated users can send messages" ON chat_messages FOR INSERT WITH CHECK (auth.uid() = sender_id);
+DO $$ BEGIN CREATE POLICY "Users can view own chat messages" ON chat_messages FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Authenticated users can send messages" ON chat_messages FOR INSERT WITH CHECK (auth.uid() = sender_id); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Done! You should see "Success. No rows returned"
